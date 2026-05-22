@@ -21,6 +21,7 @@ import { useDeleteCandidate } from '../../hooks/useCandidates';
 import { uploadCandidatePhoto, isLocalFileUri } from '../../utils/storage';
 import { usePositions } from '../../hooks/usePositions';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 
 import {
   useCandidateStore,
@@ -503,7 +504,7 @@ const CandidateFormSheet: React.FC<{
           extraScrollHeight={56}
           keyboardOpeningTime={0}
         >
-          <View style={S.form.handle} />
+          
           <Text style={S.form.title}>{editId ? 'Edit Candidate' : 'Add Candidate'}</Text>
 
           {/* Photo */}
@@ -687,14 +688,40 @@ const CandidateCard: React.FC<{
         {candidate.partylist ? <Text style={S.card.partylist} numberOfLines={1}>{candidate.partylist}</Text> : null}
       </View>
       <View style={S.card.actions}>
-        <Pressable style={({ pressed }) => [S.card.actionBtn, S.card.viewBtn,   pressed && { opacity: 0.75 }]} onPress={onView}   hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-          <Text style={S.card.actionIcon}>👁</Text>
+        <Pressable
+          style={({ pressed }) => [
+            S.card.actionBtn,
+            S.card.viewBtn,
+            pressed && { opacity: 0.75 },
+          ]}
+          onPress={onView}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <Ionicons name="eye-outline" size={18} style={S.card.actionIcon} color={C.text} />
         </Pressable>
-        <Pressable style={({ pressed }) => [S.card.actionBtn, S.card.editBtn,   pressed && { opacity: 0.75 }]} onPress={onEdit}   hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-          <Text style={S.card.actionIcon}>✏️</Text>
+
+        <Pressable
+          style={({ pressed }) => [
+            S.card.actionBtn,
+            S.card.editBtn,
+            pressed && { opacity: 0.75 },
+          ]}
+          onPress={onEdit}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <Ionicons name="create-outline" size={18} style={S.card.actionIcon} color={C.text} />
         </Pressable>
-        <Pressable style={({ pressed }) => [S.card.actionBtn, S.card.deleteBtn, pressed && { opacity: 0.75 }]} onPress={onDelete} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-          <Text style={S.card.actionIcon}>🗑️</Text>
+
+        <Pressable
+          style={({ pressed }) => [
+            S.card.actionBtn,
+            S.card.deleteBtn,
+            pressed && { opacity: 0.75 },
+          ]}
+          onPress={onDelete}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <Ionicons name="trash-outline" size={18} style={S.card.actionIcon} color={C.text} />
         </Pressable>
       </View>
     </View>

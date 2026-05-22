@@ -253,7 +253,9 @@ export function makeStyles(C: ThemeColors) {
       backgroundColor: C.redGlow,
       borderColor:     'rgba(239,68,68,0.35)',
     },
-    actionIcon: { fontSize: 14 },
+    actionIcon: { 
+      fontSize: 14,
+    },
   });
 
   const form = StyleSheet.create({
