@@ -58,8 +58,6 @@ function AddAdminModal({ visible, onClose }: { visible: boolean; onClose: () => 
           <Pressable style={s.backdrop} onPress={handleClose} />
 
           <View style={s.sheet}>
-            <View style={s.sheetHandle} />
-
             <View style={s.sheetHeader}>
               <Text style={s.sheetTitle}>Add New Admin</Text>
               <Pressable onPress={handleClose} style={({ pressed }) => [s.sheetClose, pressed && { opacity: 0.75 }]}>

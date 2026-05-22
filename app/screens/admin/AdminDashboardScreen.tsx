@@ -239,7 +239,7 @@ const PostModal: React.FC<{
       <View style={{ flex: 1 }}>
         <Pressable style={s.backdrop} onPress={onClose} />
         <View style={s.sheet}>
-          <View style={s.sheetHandle} />
+          
           <View style={s.sheetHeader}>
             <Text style={s.sheetTitle}>{isEdit ? 'Edit Post' : 'New Post'}</Text>
             <Pressable style={({ pressed }) => [s.sheetClose, pressed && { opacity: 0.75 }]} onPress={onClose}>

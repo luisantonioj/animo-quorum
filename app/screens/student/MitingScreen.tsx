@@ -6,10 +6,10 @@ import {
   View, Text, Pressable, FlatList,
   TextInput, StyleSheet, ActivityIndicator,
   Animated, StatusBar, Platform, Alert, RefreshControl,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import { useKeyboardHeight } from '../../hooks/useKeyboardHeight';
 import { Ionicons }         from '@expo/vector-icons';
 import { useMitingQuestions, useStudentUpvotes, useUpvoteQuestion, useRemoveUpvote, useSubmitQuestion } from '../../hooks/useMiting';
 import { useAuthStore }     from '../../stores/authStore';
@@ -88,7 +88,6 @@ export function MitingScreen() {
   const C      = useThemeColors();
   const isDark = useThemeStore(st => st.isDark);
   const tabBarHeight = useBottomTabBarHeight();
-  const keyboardHeight = useKeyboardHeight();
   const s      = useMemo(() => makeStyles(C), [C]);
 
   const { userProfile } = useAuthStore();
@@ -205,7 +204,11 @@ export function MitingScreen() {
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
-      <View style={{ flex: 1, paddingBottom: Platform.OS === 'ios' ? keyboardHeight : 0 }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={{ flex: 1 }}>
 
         {/* ── Header ── */}
         <View style={s.header}>
@@ -282,7 +285,8 @@ export function MitingScreen() {
             }
           </Pressable>
         </View>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
