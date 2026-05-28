@@ -285,6 +285,7 @@ export type Database = {
           display_order: number
           id: string
           position_name: string
+          program: string | null
         }
         Insert: {
           college?: string | null
@@ -292,6 +293,7 @@ export type Database = {
           display_order?: number
           id?: string
           position_name: string
+          program?: string | null
         }
         Update: {
           college?: string | null
@@ -299,6 +301,7 @@ export type Database = {
           display_order?: number
           id?: string
           position_name?: string
+          program?: string | null
         }
         Relationships: []
       }
