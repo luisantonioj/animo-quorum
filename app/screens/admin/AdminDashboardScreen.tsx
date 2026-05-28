@@ -28,6 +28,7 @@ import { useThemeColors } from '../../theme';
 import { useThemeStore } from '../../stores/themeStore';
 import type { ThemeColors } from '../../theme';
 import DateTimePickerModal from "react-native-modal-datetime-picker";
+import { CommentsModal } from '../../components/Commentmodal';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -124,9 +125,13 @@ const SummaryHeader: React.FC<{ posts: RawPost[] }> = ({ posts }) => {
 // =============================================================================
 
 const PostRow: React.FC<{
-  post: RawPost; onEdit: (post: RawPost) => void;
-  onDelete: (id: string) => void; isDeleting: boolean;
-}> = ({ post, onEdit, onDelete, isDeleting }) => {
+  post: RawPost;
+  commentCount: number;
+  onEdit: (post: RawPost) => void;
+  onDelete: (id: string) => void;
+  onViewComments: (post: RawPost) => void;
+  isDeleting: boolean;
+}> = ({ post, commentCount, onEdit, onDelete, onViewComments, isDeleting }) => {
   const { C, s } = useAdminDash();
   const isPoll = post.type === 'poll';
 
@@ -167,6 +172,18 @@ const PostRow: React.FC<{
       <View style={s.postRowFooter}>
         <Text style={s.postRowTime}>{timeAgo(post.created_at)}</Text>
         <View style={s.postRowActions}>
+
+          {/* ── Comments button ── */}
+          <Pressable
+            style={({ pressed }) => [s.actionBtn, pressed && { opacity: 0.7 }]}
+            onPress={() => onViewComments(post)}
+          >
+            <Ionicons name="chatbubble-outline" size={12} color={C.textSub} />
+            <Text style={s.actionBtnText}>
+              {commentCount > 0 ? `${commentCount} Comment${commentCount !== 1 ? 's' : ''}` : 'Comments'}
+            </Text>
+          </Pressable>
+
           <Pressable
             style={({ pressed }) => [s.actionBtn, pressed && { opacity: 0.7 }]}
             onPress={() => onEdit(post)}
@@ -174,6 +191,7 @@ const PostRow: React.FC<{
             <Ionicons name="pencil-outline" size={12} color={C.textSub} />
             <Text style={s.actionBtnText}>Edit</Text>
           </Pressable>
+
           <Pressable
             style={({ pressed }) => [s.actionBtn, s.actionBtnDanger, !isDeleting && pressed && { opacity: 0.7 }]}
             onPress={handleDelete}
@@ -184,6 +202,7 @@ const PostRow: React.FC<{
               : <Ionicons name="trash-outline" size={12} color={C.red} />}
             <Text style={[s.actionBtnText, { color: C.red }]}>Delete</Text>
           </Pressable>
+
         </View>
       </View>
     </View>
@@ -239,7 +258,7 @@ const PostModal: React.FC<{
       <View style={{ flex: 1 }}>
         <Pressable style={s.backdrop} onPress={onClose} />
         <View style={s.sheet}>
-          
+
           <View style={s.sheetHeader}>
             <Text style={s.sheetTitle}>{isEdit ? 'Edit Post' : 'New Post'}</Text>
             <Pressable style={({ pressed }) => [s.sheetClose, pressed && { opacity: 0.75 }]} onPress={onClose}>
@@ -355,10 +374,6 @@ const PostModal: React.FC<{
 };
 
 // =============================================================================
-// VOTING CONTROL PANEL
-// =============================================================================
-
-// =============================================================================
 // VOTING CONTROL PANEL (WITH DATE PICKER)
 // =============================================================================
 
@@ -406,11 +421,10 @@ const VotingControlPanel: React.FC<{
 
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
-  
+
   const [isStartPickerVisible, setStartPickerVisible] = useState(false);
   const [isEndPickerVisible, setEndPickerVisible] = useState(false);
 
-  // Hydrate local dates from settings perfectly
   useEffect(() => {
     if (settings) {
       setStartDate(settings.voting_start_time ? new Date(settings.voting_start_time) : null);
@@ -422,12 +436,12 @@ const VotingControlPanel: React.FC<{
     try {
       const startISO = startDate ? startDate.toISOString() : null;
       const endISO = endDate ? endDate.toISOString() : null;
-      
+
       if (startDate && endDate && startDate > endDate) {
         Alert.alert('Invalid Schedule', 'End time cannot be before the start time.');
         return;
       }
-      
+
       onSave(startISO, endISO);
     } catch (e: any) {
       Alert.alert('Validation Error', e.message);
@@ -438,7 +452,7 @@ const VotingControlPanel: React.FC<{
     if (!d) return 'Not set';
     return d.toLocaleString('en-US', {
       weekday: 'short', month: 'short', day: 'numeric',
-      hour: 'numeric', minute: '2-digit', hour12: true
+      hour: 'numeric', minute: '2-digit', hour12: true,
     });
   };
 
@@ -447,11 +461,7 @@ const VotingControlPanel: React.FC<{
   if (status === 'active') { statusColor = C.green; statusLabel = 'Voting Open Now'; }
   else if (status === 'not_started') { statusColor = C.amber; statusLabel = 'Scheduled'; }
   else if (status === 'ended') { statusColor = '#EF4444'; statusLabel = 'Ended'; }
-
-  if (isLoading) {
-    statusColor = C.textMuted;
-    statusLabel = 'Loading...';
-  }
+  if (isLoading) { statusColor = C.textMuted; statusLabel = 'Loading...'; }
 
   return (
     <View style={vs.card}>
@@ -462,47 +472,37 @@ const VotingControlPanel: React.FC<{
       <Text style={vs.title}>Voting Schedule</Text>
       <Text style={vs.desc}>Configure when the election polls officially open and close for students.</Text>
 
-      {/* Start Date Picker */}
       <Text style={vs.label}>Polls Open</Text>
-      <Pressable style={({pressed}) => [vs.dateButton, pressed && { opacity: 0.8 }]} onPress={() => setStartPickerVisible(true)}>
+      <Pressable style={({ pressed }) => [vs.dateButton, pressed && { opacity: 0.8 }]} onPress={() => setStartPickerVisible(true)}>
         <Text style={startDate ? vs.dateButtonText : vs.dateButtonPlaceholder}>
           {formatDisplayDate(startDate)}
         </Text>
         <Ionicons name="calendar-outline" size={18} color={C.textMuted} />
       </Pressable>
-
       <DateTimePickerModal
         isVisible={isStartPickerVisible}
         mode="datetime"
         date={startDate || new Date()}
-        onConfirm={(date) => {
-          setStartDate(date);
-          setStartPickerVisible(false);
-        }}
+        onConfirm={(date) => { setStartDate(date); setStartPickerVisible(false); }}
         onCancel={() => setStartPickerVisible(false)}
-        themeVariant={C.bg === '#0A0F0A' ? "dark" : "light"}
+        themeVariant={C.bg === '#0A0F0A' ? 'dark' : 'light'}
       />
 
-      {/* End Date Picker */}
       <Text style={vs.label}>Polls Close</Text>
-      <Pressable style={({pressed}) => [vs.dateButton, pressed && { opacity: 0.8 }]} onPress={() => setEndPickerVisible(true)}>
+      <Pressable style={({ pressed }) => [vs.dateButton, pressed && { opacity: 0.8 }]} onPress={() => setEndPickerVisible(true)}>
         <Text style={endDate ? vs.dateButtonText : vs.dateButtonPlaceholder}>
           {formatDisplayDate(endDate)}
         </Text>
         <Ionicons name="calendar-outline" size={18} color={C.textMuted} />
       </Pressable>
-
       <DateTimePickerModal
         isVisible={isEndPickerVisible}
         mode="datetime"
         date={endDate || new Date()}
         minimumDate={startDate || undefined}
-        onConfirm={(date) => {
-          setEndDate(date);
-          setEndPickerVisible(false);
-        }}
+        onConfirm={(date) => { setEndDate(date); setEndPickerVisible(false); }}
         onCancel={() => setEndPickerVisible(false)}
-        themeVariant={C.bg === '#0A0F0A' ? "dark" : "light"}
+        themeVariant={C.bg === '#0A0F0A' ? 'dark' : 'light'}
       />
 
       <Pressable
@@ -510,8 +510,8 @@ const VotingControlPanel: React.FC<{
         onPress={handleSave}
         disabled={isSaving || isLoading}
       >
-        {isSaving 
-          ? <ActivityIndicator color="#fff" style={{ marginRight: 8 }} /> 
+        {isSaving
+          ? <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
           : <Ionicons name="save-outline" size={18} color="#fff" style={{ marginRight: 8 }} />}
         <Text style={vs.saveBtnText}>{isSaving ? 'Saving...' : 'Update Schedule'}</Text>
       </Pressable>
@@ -677,13 +677,10 @@ const LiveQuestionCard: React.FC<{
 
   return (
     <View style={[ms.qCard, isTop && ms.qCardTop]}>
-      {/* ── Upvote column ── */}
       <View style={ms.upvoteCol}>
         <Ionicons name="arrow-up" size={16} color={isTop ? C.green : C.textMuted} />
         <Text style={[ms.upvoteCount, isTop && { color: C.green }]}>{q.upvote_count}</Text>
       </View>
-
-      {/* ── Question content ── */}
       <View style={ms.qContent}>
         {isTop && (
           <View style={ms.topBadge}>
@@ -783,7 +780,6 @@ const PendingQuestionCard: React.FC<{
     <View style={ms.card}>
       <Text style={ms.qText}>{q.question_text}</Text>
       <Text style={ms.qMeta}>{timeAgo(q.created_at)}</Text>
-
       {isViewOnly ? (
         <View style={ms.viewOnlyRow}>
           <Ionicons name="eye-outline" size={13} color={C.textMuted} />
@@ -792,10 +788,7 @@ const PendingQuestionCard: React.FC<{
       ) : (
         <View style={ms.approvalRow}>
           <Pressable
-            style={({ pressed }) => [
-              ms.approveBtn,
-              !(isApproving || isRejecting) && pressed && { opacity: 0.85 },
-            ]}
+            style={({ pressed }) => [ms.approveBtn, !(isApproving || isRejecting) && pressed && { opacity: 0.85 }]}
             onPress={() => onApprove(q.id)}
             disabled={isApproving || isRejecting}
           >
@@ -804,12 +797,8 @@ const PendingQuestionCard: React.FC<{
               : <Ionicons name="checkmark-outline" size={14} color="#fff" />}
             <Text style={ms.approveBtnText}>Approve</Text>
           </Pressable>
-
           <Pressable
-            style={({ pressed }) => [
-              ms.rejectBtn,
-              !(isApproving || isRejecting) && pressed && { opacity: 0.85 },
-            ]}
+            style={({ pressed }) => [ms.rejectBtn, !(isApproving || isRejecting) && pressed && { opacity: 0.85 }]}
             onPress={() => onReject(q.id)}
             disabled={isApproving || isRejecting}
           >
@@ -842,8 +831,16 @@ export function AdminDashboardScreen() {
   const [deletingId,  setDeletingId]  = useState<string | null>(null);
   const [isSaving,    setIsSaving]    = useState(false);
 
+  // ── Comments state ────────────────────────────────────────────────────────
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
+  const [commentsModal, setCommentsModal] = useState<{
+    visible: boolean;
+    postId: string | null;
+    postTitle: string;
+  }>({ visible: false, postId: null, postTitle: '' });
+
   // ── Miting state ──────────────────────────────────────────────────────────
-  const [mitingSubTab,       setMitingSubTab]      = useState<'live' | 'pending'>('live');
+  const [mitingSubTab,      setMitingSubTab]      = useState<'live' | 'pending'>('live');
   const [liveQuestions,     setLiveQuestions]     = useState<MitingQuestion[]>([]);
   const [pendingQuestions,  setPendingQuestions]  = useState<MitingQuestion[]>([]);
   const [pendingCount,      setPendingCount]      = useState(0);
@@ -853,8 +850,8 @@ export function AdminDashboardScreen() {
   const [isStartingSession, setIsStartingSession] = useState(false);
 
   // ── Theme ─────────────────────────────────────────────────────────────────
-  const C      = useThemeColors();
-  const s      = useMemo(() => makeStyles(C), [C]);
+  const C           = useThemeColors();
+  const s           = useMemo(() => makeStyles(C), [C]);
   const isDark      = useThemeStore(st => st.isDark);
   const toggleTheme = useThemeStore(st => st.toggleTheme);
 
@@ -874,6 +871,12 @@ export function AdminDashboardScreen() {
   const { mutateAsync: updateSettings, isPending: isToggling } = useUpdateSettings();
   const isMitingActive = !!(settings?.is_miting_active);
   const isBusy = isToggling || isStartingSession;
+
+  // ── Derived data (must be above useEffects that depend on posts) ──────────
+  const posts    = (rawPosts ?? []) as RawPost[];
+  const filtered = (activeTab === 'miting' || activeTab === 'voting')
+    ? []
+    : posts.filter(p => activeTab === 'all' || p.type === activeTab);
 
   // ── Always-on pending count (powers the badge on the Miting tab) ──────────
   useEffect(() => {
@@ -936,6 +939,35 @@ export function AdminDashboardScreen() {
     };
   }, [activeTab]);
 
+  // ── Comment counts per post ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!posts.length) return;
+
+    const fetchCounts = async () => {
+      const { data } = await supabase
+        .from('Comments')
+        .select('post_id')
+        .in('post_id', posts.map(p => p.id));
+
+      if (!data) return;
+
+      const counts: Record<string, number> = {};
+      data.forEach((row: { post_id: string }) => {
+        counts[row.post_id] = (counts[row.post_id] ?? 0) + 1;
+      });
+      setCommentCounts(counts);
+    };
+
+    fetchCounts();
+
+    const ch = supabase
+      .channel('admin-comment-counts')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'Comments' }, fetchCounts)
+      .subscribe();
+
+    return () => { supabase.removeChannel(ch); };
+  }, [posts]);
+
   // ── Approve a pending question ────────────────────────────────────────────
   const handleApprove = async (id: string) => {
     setApprovingId(id);
@@ -988,7 +1020,6 @@ export function AdminDashboardScreen() {
   // ── Miting session toggle ─────────────────────────────────────────────────
   const handleMitingToggle = () => {
     if (isMitingActive) {
-      // End session — only deactivate, questions stay intact
       Alert.alert(
         'End Miting Session?',
         'This will close the live Q&A. Students can no longer submit questions. All questions will remain in view-only mode until the next session goes live.',
@@ -1008,7 +1039,6 @@ export function AdminDashboardScreen() {
         ],
       );
     } else {
-      // Go Live — wipe all previous questions first, then activate
       const prevCount = liveQuestions.length + pendingQuestions.length;
       const message = prevCount > 0
         ? `This will permanently clear all ${prevCount} question(s) from the previous session and open a fresh live Q&A. Students will be notified immediately.`
@@ -1043,7 +1073,7 @@ export function AdminDashboardScreen() {
     }
   };
 
-  // ── Voting schedule toggle ────────────────────────────────────────────────
+  // ── Voting schedule save ──────────────────────────────────────────────────
   const handleVotingSave = async (start: string | null, end: string | null) => {
     try {
       await updateSettings({ voting_start_time: start, voting_end_time: end });
@@ -1052,12 +1082,6 @@ export function AdminDashboardScreen() {
       Alert.alert('Error', e?.message ?? 'Could not update voting schedule.');
     }
   };
-
-  // ── Derived data ──────────────────────────────────────────────────────────
-  const posts    = (rawPosts ?? []) as RawPost[];
-  const filtered = (activeTab === 'miting' || activeTab === 'voting')
-    ? []
-    : posts.filter(p => activeTab === 'all' || p.type === activeTab);
 
   // ── Modal helpers ─────────────────────────────────────────────────────────
   const openCreate = () => setModal({ visible: true, mode: 'create', post: null });
@@ -1069,14 +1093,7 @@ export function AdminDashboardScreen() {
     try {
       let postId: string;
       if (id) {
-        await updatePost({ 
-          id, 
-          updates: { 
-            type: payload.type, 
-            title: payload.title, 
-            content: payload.content 
-          } 
-        });
+        await updatePost({ id, updates: { type: payload.type, title: payload.title, content: payload.content } });
         postId = id;
       } else {
         const created = await createPost({
@@ -1086,11 +1103,9 @@ export function AdminDashboardScreen() {
         } as any) as any;
         postId = created.id;
       }
-      
       if (payload.type === 'poll') {
         await savePollOptions(postId, payload.pollOptions);
       }
-      
       await refetch();
       closeModal();
     } catch (e: any) {
@@ -1115,13 +1130,17 @@ export function AdminDashboardScreen() {
   const renderPost = useCallback(({ item }: { item: RawPost }) => (
     <PostRow
       post={item}
+      commentCount={commentCounts[item.id] ?? 0}
       onEdit={openEdit}
       onDelete={handleDelete}
+      onViewComments={(post) =>
+        setCommentsModal({ visible: true, postId: post.id, postTitle: post.title })
+      }
       isDeleting={deletingId === item.id}
     />
-  ), [deletingId]);
+  ), [deletingId, commentCounts]);
 
-  // ── Miting sub-tab styles (memoised, depends on C) ────────────────────────
+  // ── Miting sub-tab styles ─────────────────────────────────────────────────
   const mit = useMemo(() => ({
     subTabRow: { flexDirection: 'row' as const, gap: 8, marginBottom: 12 },
     subTab: {
@@ -1141,11 +1160,9 @@ export function AdminDashboardScreen() {
     emptyText: { fontSize: 13, color: C.textMuted },
   }), [C]);
 
-  // ── List header (JSX element, not a component — no hooks allowed here) ────
-
+  // ── List header ───────────────────────────────────────────────────────────
   const ListHeader = useCallback(() => (
     <>
-      {/* ── App header ── */}
       <View style={s.appHeader}>
         <View>
           <Text style={s.appLogo}>AnimoQuorum</Text>
@@ -1159,8 +1176,7 @@ export function AdminDashboardScreen() {
           >
             {isRefreshing
               ? <ActivityIndicator size={18} color={C.green} />
-              : <Ionicons name="refresh-outline" size={20} color={C.text} />
-            }
+              : <Ionicons name="refresh-outline" size={20} color={C.text} />}
           </Pressable>
           <Pressable onPress={toggleTheme} style={({ pressed }) => [{ paddingLeft: 12, paddingRight: 4 }, pressed && { opacity: 0.7 }]}>
             <Ionicons name={isDark ? 'sunny-outline' : 'moon-outline'} size={20} color={C.text} />
@@ -1297,7 +1313,6 @@ export function AdminDashboardScreen() {
       )}
     </>
   ), [
-    // ✅ All state/props the header depends on
     s, C, isDark, isRefreshing, isLoading, isError, posts, activeTab, settings,
     votingStatus, settingsLoading, isToggling, isMitingActive, isBusy, pendingCount,
     mitingSubTab, liveQuestions, pendingQuestions, approvingId, rejectingId,
@@ -1345,6 +1360,14 @@ export function AdminDashboardScreen() {
           onSave={handleSave}
           isSaving={isSaving}
         />
+
+        <CommentsModal
+          visible={commentsModal.visible}
+          postId={commentsModal.postId}
+          postTitle={commentsModal.postTitle}
+          onClose={() => setCommentsModal(m => ({ ...m, visible: false }))}
+        />
+
       </SafeAreaView>
     </AdminDashCtx.Provider>
   );

@@ -28,19 +28,19 @@ export function AdminNavigator() {
         headerShown: false,
         tabBarIcon: ({ color, size }) => {
           const icons: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
-            AdminDashboard:  'speedometer-outline',
+            AdminDashboard:  'home-outline',
             AdminCandidates: 'people-outline',
             AdminResults:    'bar-chart-outline',
-            AdminSettings:   'settings-outline',
+            AdminSettings:   'person-outline',
           };
           return <Ionicons name={icons[route.name]} size={size} color={color} />;
         },
       })}
     >
-      <Tab.Screen name="AdminDashboard"  component={AdminDashboardScreen}  options={{ title: 'Overview' }}   />
+      <Tab.Screen name="AdminDashboard"  component={AdminDashboardScreen}  options={{ title: 'Home' }}   />
       <Tab.Screen name="AdminCandidates" component={AdminCandidatesScreen} options={{ title: 'Candidates' }} />
       <Tab.Screen name="AdminResults"    component={AdminResultsScreen}    options={{ title: 'Results' }}    />
-      <Tab.Screen name="AdminSettings"   component={AdminSettingsScreen}   options={{ title: 'Settings' }}   />
+      <Tab.Screen name="AdminSettings"   component={AdminSettingsScreen}   options={{ title: 'Profile' }}   />
     </Tab.Navigator>
   );
 }

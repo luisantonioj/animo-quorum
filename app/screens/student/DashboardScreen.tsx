@@ -193,7 +193,7 @@ const VotingCountdown: React.FC = () => {
     return (
       <View style={S.countdown.wrapper}>
         <View style={[S.countdown.glowBar, { backgroundColor: C.textMuted }]} />
-        <Text style={S.countdown.label}>🗳 Voting Has Ended</Text>
+        <Text style={S.countdown.label}> Voting Has Ended</Text>
         <View style={S.countdown.timerRow}>
           {['00', '00', '00'].map((v, i) => (
             <React.Fragment key={i}>
