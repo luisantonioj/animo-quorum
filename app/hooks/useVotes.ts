@@ -30,11 +30,13 @@ export function useCastVote() {
 }
 
 // GET /votes/tally — admin: full vote counts
-export function useVoteTally() {
+export function useVoteTally(cycleId?: string | null) {
   return useQuery({
-    queryKey: ['votes', 'tally'],
+    queryKey: ['votes', 'tally', cycleId ?? null],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_vote_tally');
+      const { data, error } = await supabase.rpc('get_vote_tally', {
+        p_cycle_id: cycleId ?? undefined,
+      });
       
       if (error) throw error;
       if (!data) return []; 
@@ -47,11 +49,13 @@ export function useVoteTally() {
 // GET /votes/live — students: anonymous percentages only
 // Uses polling (refetchInterval) instead of Realtime to stay under the
 // 200 concurrent connection free-tier limit
-export function useLiveResults() {
+export function useLiveResults(cycleId?: string | null) {
   return useQuery({
-    queryKey: ['votes', 'live'],
+    queryKey: ['votes', 'live', cycleId ?? null],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_live_results');
+      const { data, error } = await supabase.rpc('get_live_results', {
+        p_cycle_id: cycleId ?? undefined,
+      });
       
       if (error) throw error;
       if (!data) return []; 
