@@ -43,10 +43,12 @@ interface AuthState {
   session:        Session | null;
   userProfile:    UserRow | null;
   role:           'Admin' | 'Student' | null;
+  activeCycleId:  string | null;
   initialized:    boolean;
   setSession:     (session: Session | null) => void;
   setProfile:     (profile: UserRow | null) => void;
   setRole:        (role: 'Admin' | 'Student' | null) => void;
+  setActiveCycleId: (id: string | null) => void;
   setInitialized: (v: boolean) => void;
   clear:          () => void;
   splashReady:    boolean;
@@ -59,17 +61,19 @@ export const useAuthStore = create<AuthState>((set) => ({
   session:        null,
   userProfile:    null,
   role:           null,
+  activeCycleId:  null,
   activeRole:     null,
   initialized:    false,
   setSession:     (session)     => set({ session }),
   setProfile:     (userProfile) => set({ userProfile }),
   setRole:        (role)        => set({ role }),
+  setActiveCycleId: (activeCycleId) => set({ activeCycleId }),
   setInitialized: (v)           => set({ initialized: v }),
   setActiveRole: (activeRole)   => set({ activeRole }),
   // clear() resets everything except initialized — the app stays mounted,
   // only the auth state is wiped. RootNavigator switches to Auth stack.
   splashReady:    false,
   setSplashReady: (v) => set({ splashReady: v }),
-  clear: () => set({ session: null, userProfile: null, role: null, activeRole: null }),
+  clear: () => set({ session: null, userProfile: null, role: null, activeRole: null, activeCycleId: null }),
 }));
 

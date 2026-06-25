@@ -30,6 +30,7 @@ import {
   PROGRAM_COORDINATOR_POSITION,
 } from '../../stores/candidateStore';
 import type { Candidate, Department, Position, VoterDepartment } from '../../stores/candidateStore';
+import { useAuthStore } from '../../stores/authStore';
 
 import { CandidateModal } from '../../components/CandidateModal';
 import type { CandidateRow } from '../../components/CandidateModal';
@@ -846,6 +847,7 @@ function AdminCandidatesScreen() {
   const C = useThemeColors();
   const S = useMemo(() => makeStyles(C), [C]);
   const queryClient = useQueryClient();
+  const activeCycleId = useAuthStore(state => state.activeCycleId);
   useFocusEffect(
     useCallback(() => {
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
@@ -869,14 +871,17 @@ function AdminCandidatesScreen() {
   }, [dbPositions]);
 
   const { data: dbCandidates = [], isLoading } = useQuery({
-    queryKey: ['candidates', 'admin'],
+    queryKey: ['candidates', 'admin', activeCycleId],
     queryFn: async () => {
+      if (!activeCycleId) return [];
       const { data, error } = await supabase
         .from('Candidates')
-        .select('*, Positions(position_name)');
+        .select('*, Positions(position_name)')
+        .eq('election_cycle_id', activeCycleId);
       if (error) throw error;
       return data;
     },
+    enabled: !!activeCycleId,
   });
 
   const deleteMutation = useMutation({
@@ -1038,6 +1043,10 @@ function AdminCandidatesScreen() {
 
   const handleSave = useCallback(async (id: string | null, data: FormState) => {
     if (!data.department || !data.position) return;
+    if (!activeCycleId) {
+      Alert.alert('No Active Election', 'Create or activate an election cycle before adding candidates.');
+      return;
+    }
     try {
       const expectedPosName = data.department === 'Executive Council'
         ? data.position
@@ -1087,6 +1096,7 @@ function AdminCandidatesScreen() {
         name:        data.name.trim(),
         partylist:   data.partylist.trim()   || null,
         position_id: posId,
+        election_cycle_id: activeCycleId,
         email:       data.email.trim()       || null,
         credentials: data.credentials.trim() || null,
         platform:    data.platform.trim()    || null,
@@ -1103,7 +1113,7 @@ function AdminCandidatesScreen() {
     } catch (err: any) {
       Alert.alert('Save Failed', err.message || 'An unexpected error occurred.');
     }
-  }, [dbPositions, addMutation, updateMutation, queryClient]);
+  }, [dbPositions, addMutation, updateMutation, queryClient, activeCycleId]);
 
   // ─── Position/Department CRUD (live in parent, passed as props) ───────────
 

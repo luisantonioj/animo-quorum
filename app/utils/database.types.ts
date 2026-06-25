@@ -50,6 +50,7 @@ export type Database = {
         Row: {
           created_at: string | null
           credentials: string | null
+          election_cycle_id: string
           email: string | null
           id: string
           name: string
@@ -62,6 +63,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           credentials?: string | null
+          election_cycle_id: string
           email?: string | null
           id?: string
           name: string
@@ -74,6 +76,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           credentials?: string | null
+          election_cycle_id?: string
           email?: string | null
           id?: string
           name?: string
@@ -85,6 +88,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "Candidates_election_cycle_id_fkey"
+            columns: ["election_cycle_id"]
+            isOneToOne: false
+            referencedRelation: "ElectionCycles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "Candidates_position_id_fkey"
             columns: ["position_id"]
             isOneToOne: false
@@ -92,6 +102,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ElectionCycles: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_miting_active: boolean | null
+          label: string
+          show_live_results: boolean | null
+          status: string
+          updated_at: string | null
+          voting_end_time: string | null
+          voting_start_time: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_miting_active?: boolean | null
+          label: string
+          show_live_results?: boolean | null
+          status?: string
+          updated_at?: string | null
+          voting_end_time?: string | null
+          voting_start_time?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_miting_active?: boolean | null
+          label?: string
+          show_live_results?: boolean | null
+          status?: string
+          updated_at?: string | null
+          voting_end_time?: string | null
+          voting_start_time?: string | null
+        }
+        Relationships: []
       }
       Comments: {
         Row: {
@@ -522,6 +568,7 @@ export type Database = {
         Row: {
           candidate_id: string | null
           created_at: string | null
+          election_cycle_id: string
           id: string
           is_valid: boolean | null
           position_id: string
@@ -530,6 +577,7 @@ export type Database = {
         Insert: {
           candidate_id?: string | null
           created_at?: string | null
+          election_cycle_id: string
           id?: string
           is_valid?: boolean | null
           position_id: string
@@ -538,6 +586,7 @@ export type Database = {
         Update: {
           candidate_id?: string | null
           created_at?: string | null
+          election_cycle_id?: string
           id?: string
           is_valid?: boolean | null
           position_id?: string
@@ -549,6 +598,13 @@ export type Database = {
             columns: ["candidate_id"]
             isOneToOne: false
             referencedRelation: "Candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Votes_election_cycle_id_fkey"
+            columns: ["election_cycle_id"]
+            isOneToOne: false
+            referencedRelation: "ElectionCycles"
             referencedColumns: ["id"]
           },
           {
@@ -572,6 +628,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      active_cycle_id: { Args: never; Returns: string }
       active_election_id: { Args: never; Returns: string }
       admin_lookup_user_id_by_email: {
         Args: { p_email: string }

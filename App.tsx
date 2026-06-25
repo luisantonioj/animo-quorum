@@ -25,7 +25,7 @@ import { useAuthStore } from './app/stores/authStore';
 import { hydrateTheme } from './app/stores/themeStore';
 
 export default function App() {
-  const { setSession, setRole, setActiveRole, setProfile, setInitialized, clear } = useAuthStore();
+  const { setSession, setRole, setActiveRole, setProfile, setActiveCycleId, setInitialized, clear } = useAuthStore();
 
   useEffect(() => {
     // ── 0. Restore persisted theme preference ─────────────────────────────────
@@ -113,6 +113,15 @@ export default function App() {
               setRole(resolvedRole);
               setActiveRole(resolvedRole);
               setProfile(userData as any);
+
+              const { data: activeCycle, error: cycleError } = await supabase
+                .from('ElectionCycles')
+                .select('id')
+                .eq('status', 'active')
+                .maybeSingle();
+
+              if (cycleError) throw new Error(cycleError.message);
+              setActiveCycleId(activeCycle?.id ?? null);
             }
           } else {
             clear();
