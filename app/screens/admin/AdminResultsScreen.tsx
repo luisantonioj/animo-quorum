@@ -1,5 +1,5 @@
 // app/screens/admin/AdminResultsScreen.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,8 @@ import { useThemeColors } from '../../theme';
 import { useThemeStore } from '../../stores/themeStore';
 import { useLiveResults, LivePosition, LiveCandidate } from '../../hooks/useLiveResults';
 import { useSettings, useUpdateSettings } from '../../hooks/useSettings';
-import { supabase } from '../../utils/supabase';
+import { useElectionCycles } from '../../hooks/useElectionCycles';
+import { useAuthStore } from '../../stores/authStore';
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
@@ -215,9 +216,18 @@ export function AdminResultsScreen() {
   const S = useMemo(() => makeStyles(C), [C]);
   
   const [activeTab, setActiveTab] = useState('All');
+  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
+  const activeCycleId = useAuthStore(state => state.activeCycleId);
+  const { data: cycles = [] } = useElectionCycles();
+  const visibleCycleId = selectedCycleId ?? activeCycleId;
+  const visibleCycle = cycles.find(c => c.id === visibleCycleId) ?? null;
+
+  useEffect(() => {
+    if (!selectedCycleId && activeCycleId) setSelectedCycleId(activeCycleId);
+  }, [activeCycleId, selectedCycleId]);
 
   // Hook into our live Supabase data
-  const { positions, isLoading, isError, error, refetch } = useLiveResults();
+  const { positions, isLoading, isError, error, refetch } = useLiveResults(visibleCycleId);
 
   const { settings } = useSettings();
   const { mutateAsync: updateSettings } = useUpdateSettings();
@@ -225,6 +235,7 @@ export function AdminResultsScreen() {
   const isTurnoutVisible = settings?.show_live_results !== false;
 
   const handleToggleVisibility = async () => {
+    if (visibleCycleId !== activeCycleId) return;
     setTogglingVisibility(true);
     try {
       await updateSettings({ show_live_results: !isTurnoutVisible });
@@ -286,15 +297,15 @@ export function AdminResultsScreen() {
         <View>
           <Text style={S.screen.headerTitle}>Live Results</Text>
           <Text style={S.screen.headerSub}>
-            Total student turnout: {grandTotal.toLocaleString()}
+            {visibleCycle?.label ?? 'No active election'} - turnout: {grandTotal.toLocaleString()}
           </Text>
         </View>
         
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <Pressable
             onPress={handleToggleVisibility}
-            disabled={togglingVisibility}
-            style={({ pressed }) => [S.live.controlsRow, pressed && { opacity: 0.75 }]}
+            disabled={togglingVisibility || visibleCycleId !== activeCycleId}
+            style={({ pressed }) => [S.live.controlsRow, visibleCycleId !== activeCycleId && { opacity: 0.45 }, pressed && { opacity: 0.75 }]}
           >
             {togglingVisibility
               ? <ActivityIndicator size={16} color={C.text} style={{ padding: SPACE.xs }} />
@@ -330,6 +341,32 @@ export function AdminResultsScreen() {
           }
         >
           {/* ── Pill Tabs (Matches Dashboard filtering) ── */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.filter.scrollRow}>
+            <View style={S.filter.innerRow}>
+              {cycles.map(cycle => {
+                const isSelected = cycle.id === visibleCycleId;
+                return (
+                  <Pressable
+                    key={cycle.id}
+                    onPress={() => setSelectedCycleId(cycle.id)}
+                    style={({ pressed }) => [
+                      S.filter.tab,
+                      isSelected && { backgroundColor: C.greenLight, borderColor: C.green },
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
+                    <Text style={[S.filter.tabText, isSelected && S.filter.tabTextActive]}>
+                      {cycle.label} ({cycle.status})
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
+          <Text style={{ color: C.textMuted, fontSize: 12, lineHeight: 18, marginBottom: SPACE.sm }}>
+            Turnout denominators are still hardcoded in COLLEGE_POPULATIONS and should become per-cycle data before official reporting.
+          </Text>
+
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}

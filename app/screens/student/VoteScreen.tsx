@@ -330,9 +330,10 @@ const SetupScreen: React.FC<{
   onToggleConsent: () => void;
   onBegin: () => void;
   isLoading: boolean;
-}> = ({ selectedDept, onSelectDept, selectedProgram, onSelectProgram, consented, onToggleConsent, onBegin, isLoading }) => {
+  hasActiveCycle: boolean;
+}> = ({ selectedDept, onSelectDept, selectedProgram, onSelectProgram, consented, onToggleConsent, onBegin, isLoading, hasActiveCycle }) => {
   const { C, s } = useVC();
-  const canBegin = !!selectedDept && !!selectedProgram && consented && !isLoading;
+  const canBegin = hasActiveCycle && !!selectedDept && !!selectedProgram && consented && !isLoading;
   const programs = selectedDept ? PROGRAMS[selectedDept] : [];
 
   return (
@@ -403,7 +404,9 @@ const SetupScreen: React.FC<{
         </Pressable>
       </View>
 
-      {!selectedDept ? (
+      {!hasActiveCycle ? (
+        <View style={s.warnBox}><Ionicons name="alert-circle-outline" size={14} color={C.amber} /><Text style={s.warnText}>No active election cycle is available yet.</Text></View>
+      ) : !selectedDept ? (
         <View style={s.warnBox}><Ionicons name="alert-circle-outline" size={14} color={C.amber} /><Text style={s.warnText}>Please select your department to continue.</Text></View>
       ) : !selectedProgram ? (
         <View style={s.warnBox}><Ionicons name="alert-circle-outline" size={14} color={C.amber} /><Text style={s.warnText}>Please select your program to continue.</Text></View>
@@ -470,6 +473,7 @@ export function VoteScreen() {
 
   const queryClient = useQueryClient();
   const userProfile = useAuthStore(state => state.userProfile);
+  const activeCycleId = useAuthStore(state => state.activeCycleId);
   const disabledPositions = useCandidateStore(state => state.disabledPositions);
   const { selectedCandidates, selectCandidate, reset } = useVotingStore();
 
@@ -491,31 +495,40 @@ export function VoteScreen() {
     if (!didNotifyRef.current) { didNotifyRef.current = true; notifyVotingStarted(); }
   }, []);
 
+  useEffect(() => {
+    reset();
+    setPhase('setup');
+  }, [activeCycleId, reset]);
+
   // ─── Supabase Queries & Mutations ──────────────────────────────────────────
 
   const { data: dbCandidates = [], isLoading: isLoadingCandidates } = useQuery({
-    queryKey: ['candidates', 'student'],
+    queryKey: ['candidates', 'student', activeCycleId],
     queryFn: async () => {
+      if (!activeCycleId) return [];
       const { data, error } = await supabase
         .from('Candidates')
-        .select('*, Positions(position_name, college, program)');
+        .select('*, Positions(position_name, college, program)')
+        .eq('election_cycle_id', activeCycleId);
       if (error) throw error;
       return data;
     },
+    enabled: !!activeCycleId,
   });
 
   const { data: hasVoted, isLoading: isLoadingVotes } = useQuery({
-    queryKey: ['my_votes', userProfile?.id],
+    queryKey: ['my_votes', userProfile?.id, activeCycleId],
     queryFn: async () => {
-      if (!userProfile?.id) return false;
+      if (!userProfile?.id || !activeCycleId) return false;
       const { count, error } = await supabase
         .from('Votes')
         .select('id', { count: 'exact', head: true })
-        .eq('student_id', userProfile.id);
+        .eq('student_id', userProfile.id)
+        .eq('election_cycle_id', activeCycleId);
       if (error) throw error;
       return (count ?? 0) > 0;
     },
-    enabled: !!userProfile?.id,
+    enabled: !!userProfile?.id && !!activeCycleId,
   });
 
   // Automatically skip to Already Voted screen if they have previous votes
@@ -528,6 +541,7 @@ export function VoteScreen() {
   const submitVotesMutation = useMutation({
     mutationFn: async (selections: Record<string, string>) => {
       if (!userProfile?.id) throw new Error('You must be logged in to vote.');
+      if (!activeCycleId) throw new Error('There is no active election cycle.');
 
       // Abstentions 
       const votesToInsert = Object.entries(selections)
@@ -535,6 +549,7 @@ export function VoteScreen() {
           student_id:   userProfile.id,
           position_id:  posId,
           candidate_id: candId === ABSTAIN_ID ? null : candId,
+          election_cycle_id: activeCycleId,
           is_valid:     true,
         }));
 
@@ -543,7 +558,7 @@ export function VoteScreen() {
         if (error) throw error;
       }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my_votes'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my_votes', userProfile?.id, activeCycleId] }),
   });
 
   // ─── Data Transformations ──────────────────────────────────────────────────
@@ -661,8 +676,9 @@ export function VoteScreen() {
 
   const handleBegin = useCallback(() => {
     if (!selectedDept || !selectedProgram || !consented) return;
+    if (!activeCycleId) return;
     reset(); setPhase('ballot');
-  }, [selectedDept, selectedProgram, consented, reset]);
+  }, [selectedDept, selectedProgram, consented, activeCycleId, reset]);
 
   const handleGoBack = useCallback(() => {
     Alert.alert('Go Back to Setup?', 'Your current vote selections will be cleared.', [
@@ -719,6 +735,7 @@ export function VoteScreen() {
             onToggleConsent={() => setConsented(v => !v)}
             onBegin={handleBegin}
             isLoading={isLoadingCandidates || isLoadingVotes}
+            hasActiveCycle={!!activeCycleId}
           />
         )}
 

@@ -22,6 +22,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { usePosts, useCreatePost, useUpdatePost, useDeletePost } from '../../hooks/usePosts';
 import { useSettings, useUpdateSettings } from '../../hooks/useSettings';
+import {
+  useCreateElectionCycle,
+  useElectionCycles,
+  useUpdateElectionCycleStatus,
+  type ElectionCycle,
+  type ElectionCycleStatus,
+} from '../../hooks/useElectionCycles';
+import { useAuthStore } from '../../stores/authStore';
 import { supabase } from '../../utils/supabase';
 import { makeStyles, type AdminDashboardStyles } from './AdminDashboardScreen.styles';
 import { useThemeColors } from '../../theme';
@@ -421,16 +429,16 @@ const VotingControlPanel: React.FC<{
 
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
+  const votingStartTime = settings?.voting_start_time ?? null;
+  const votingEndTime = settings?.voting_end_time ?? null;
 
   const [isStartPickerVisible, setStartPickerVisible] = useState(false);
   const [isEndPickerVisible, setEndPickerVisible] = useState(false);
 
   useEffect(() => {
-    if (settings) {
-      setStartDate(settings.voting_start_time ? new Date(settings.voting_start_time) : null);
-      setEndDate(settings.voting_end_time ? new Date(settings.voting_end_time) : null);
-    }
-  }, [settings]);
+    setStartDate(votingStartTime ? new Date(votingStartTime) : null);
+    setEndDate(votingEndTime ? new Date(votingEndTime) : null);
+  }, [votingStartTime, votingEndTime]);
 
   const handleSave = () => {
     try {
@@ -515,6 +523,106 @@ const VotingControlPanel: React.FC<{
           : <Ionicons name="save-outline" size={18} color="#fff" style={{ marginRight: 8 }} />}
         <Text style={vs.saveBtnText}>{isSaving ? 'Saving...' : 'Update Schedule'}</Text>
       </Pressable>
+    </View>
+  );
+};
+
+const CycleControlPanel: React.FC<{
+  cycles: ElectionCycle[];
+  selectedCycleId: string | null;
+  activeCycleId: string | null;
+  isBusy: boolean;
+  onSelect: (id: string) => void;
+  onCreate: (label: string) => void;
+  onStatusChange: (id: string, status: ElectionCycleStatus) => void;
+}> = ({ cycles, selectedCycleId, activeCycleId, isBusy, onSelect, onCreate, onStatusChange }) => {
+  const { C } = useAdminDash();
+  const [label, setLabel] = useState('');
+
+  const styles = useMemo(() => ({
+    card: { backgroundColor: C.surface2, borderRadius: 16, borderWidth: 1, borderColor: C.border, padding: 16, marginBottom: 16 } as const,
+    title: { fontSize: 18, fontWeight: '800' as const, color: C.text, marginBottom: 10 },
+    row: { flexDirection: 'row' as const, gap: 8, alignItems: 'center' as const, marginBottom: 12 },
+    input: { flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, color: C.text, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 } as const,
+    btn: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: C.green } as const,
+    btnText: { color: '#fff', fontWeight: '700' as const, fontSize: 13 },
+    cycle: { borderWidth: 1, borderColor: C.border, backgroundColor: C.surface, borderRadius: 12, padding: 12, marginBottom: 8 } as const,
+    cycleActive: { borderColor: C.green, backgroundColor: C.greenLight } as const,
+    cycleHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, gap: 8 },
+    cycleLabel: { color: C.text, fontSize: 14, fontWeight: '700' as const, flex: 1 },
+    status: { color: C.textMuted, fontSize: 11, fontWeight: '800' as const, textTransform: 'uppercase' as const },
+    actionRow: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 8, marginTop: 10 },
+    action: { borderRadius: 999, borderWidth: 1, borderColor: C.border, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: C.pill } as const,
+    actionText: { color: C.textSub, fontSize: 12, fontWeight: '700' as const },
+    empty: { color: C.textMuted, fontSize: 13, lineHeight: 18 },
+  }), [C]);
+
+  const create = () => {
+    const trimmed = label.trim();
+    if (!trimmed) {
+      Alert.alert('Missing label', 'Enter an academic year label first.');
+      return;
+    }
+    onCreate(trimmed);
+    setLabel('');
+  };
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.title}>Election Cycles</Text>
+      <View style={styles.row}>
+        <TextInput
+          value={label}
+          onChangeText={setLabel}
+          placeholder="e.g. AY 2026-2027"
+          placeholderTextColor={C.textMuted}
+          style={styles.input}
+        />
+        <Pressable
+          onPress={create}
+          disabled={isBusy}
+          style={({ pressed }) => [styles.btn, !isBusy && pressed && { opacity: 0.85 }]}
+        >
+          <Ionicons name="add-circle-outline" size={16} color="#fff" />
+          <Text style={styles.btnText}>Create</Text>
+        </Pressable>
+      </View>
+
+      {cycles.length === 0 ? (
+        <Text style={styles.empty}>No election cycles yet. Create a draft cycle to begin annual setup.</Text>
+      ) : cycles.map(cycle => {
+        const isSelected = cycle.id === selectedCycleId;
+        const isActive = cycle.id === activeCycleId;
+        return (
+          <Pressable
+            key={cycle.id}
+            onPress={() => onSelect(cycle.id)}
+            style={({ pressed }) => [styles.cycle, isSelected && styles.cycleActive, pressed && { opacity: 0.86 }]}
+          >
+            <View style={styles.cycleHeader}>
+              <Text style={styles.cycleLabel}>{cycle.label}{isActive ? ' (Active)' : ''}</Text>
+              <Text style={styles.status}>{cycle.status}</Text>
+            </View>
+            <View style={styles.actionRow}>
+              {cycle.status !== 'active' && cycle.status !== 'archived' && (
+                <Pressable style={styles.action} disabled={isBusy} onPress={() => onStatusChange(cycle.id, 'active')}>
+                  <Text style={styles.actionText}>Activate</Text>
+                </Pressable>
+              )}
+              {cycle.status === 'active' && (
+                <Pressable style={styles.action} disabled={isBusy} onPress={() => onStatusChange(cycle.id, 'closed')}>
+                  <Text style={styles.actionText}>Close</Text>
+                </Pressable>
+              )}
+              {cycle.status === 'closed' && (
+                <Pressable style={styles.action} disabled={isBusy} onPress={() => onStatusChange(cycle.id, 'archived')}>
+                  <Text style={styles.actionText}>Archive</Text>
+                </Pressable>
+              )}
+            </View>
+          </Pressable>
+        );
+      })}
     </View>
   );
 };
@@ -830,6 +938,7 @@ export function AdminDashboardScreen() {
   const [modal,       setModal]       = useState<ModalState>({ visible: false, mode: 'create', post: null });
   const [deletingId,  setDeletingId]  = useState<string | null>(null);
   const [isSaving,    setIsSaving]    = useState(false);
+  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
 
   // ── Comments state ────────────────────────────────────────────────────────
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
@@ -854,9 +963,16 @@ export function AdminDashboardScreen() {
   const s           = useMemo(() => makeStyles(C), [C]);
   const isDark      = useThemeStore(st => st.isDark);
   const toggleTheme = useThemeStore(st => st.toggleTheme);
+  const activeCycleId = useAuthStore(st => st.activeCycleId);
 
   // ── Data hooks ────────────────────────────────────────────────────────────
-  const { data: rawPosts, isLoading, isError, error, refetch } = usePosts();
+  const { data: cycles = [] } = useElectionCycles();
+  const visibleCycleId = selectedCycleId ?? activeCycleId;
+  const visibleCycle = cycles.find(c => c.id === visibleCycleId) ?? null;
+  const canEditVisibleCycle = visibleCycle?.status === 'active';
+  const { mutateAsync: createCycle, isPending: isCreatingCycle } = useCreateElectionCycle();
+  const { mutateAsync: updateCycleStatus, isPending: isUpdatingCycleStatus } = useUpdateElectionCycleStatus();
+  const { data: rawPosts, isLoading, isError, error, refetch } = usePosts(visibleCycleId);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -871,19 +987,39 @@ export function AdminDashboardScreen() {
   const { mutateAsync: updateSettings, isPending: isToggling } = useUpdateSettings();
   const isMitingActive = !!(settings?.is_miting_active);
   const isBusy = isToggling || isStartingSession;
+  const isCycleBusy = isCreatingCycle || isUpdatingCycleStatus;
+
+  useEffect(() => {
+    if (!selectedCycleId && activeCycleId) setSelectedCycleId(activeCycleId);
+  }, [activeCycleId, selectedCycleId]);
 
   // ── Derived data (must be above useEffects that depend on posts) ──────────
-  const posts    = (rawPosts ?? []) as RawPost[];
+  const posts    = useMemo(() => (rawPosts ?? []) as RawPost[], [rawPosts]);
   const filtered = (activeTab === 'miting' || activeTab === 'voting')
     ? []
     : posts.filter(p => activeTab === 'all' || p.type === activeTab);
+  const visibleVotingStatus = useMemo(() => {
+    const cycle = visibleCycle;
+    if (!cycle?.voting_start_time || !cycle?.voting_end_time) return 'unconfigured';
+    const now = Date.now();
+    const start = new Date(cycle.voting_start_time).getTime();
+    const end = new Date(cycle.voting_end_time).getTime();
+    if (now < start) return 'not_started';
+    if (now > end) return 'ended';
+    return 'active';
+  }, [visibleCycle]);
 
   // ── Always-on pending count (powers the badge on the Miting tab) ──────────
   useEffect(() => {
     const fetchCount = async () => {
+      if (!visibleCycleId) {
+        setPendingCount(0);
+        return;
+      }
       const { count } = await supabase
         .from('MitingQuestions')
         .select('*', { count: 'exact', head: true })
+        .eq('election_cycle_id', visibleCycleId)
         .eq('is_approved', false);
       setPendingCount(count ?? 0);
     };
@@ -896,11 +1032,11 @@ export function AdminDashboardScreen() {
       .subscribe();
 
     return () => { supabase.removeChannel(ch); };
-  }, []);
+  }, [visibleCycleId]);
 
   // ── Full question lists + realtime (only when Miting tab is open) ─────────
   useEffect(() => {
-    if (activeTab !== 'miting') return;
+    if (activeTab !== 'miting' || !visibleCycleId) return;
 
     let cancelled = false;
 
@@ -908,6 +1044,7 @@ export function AdminDashboardScreen() {
       const { data } = await supabase
         .from('MitingQuestions')
         .select('*')
+        .eq('election_cycle_id', visibleCycleId)
         .eq('is_approved', true)
         .order('upvote_count', { ascending: false });
       if (!cancelled && data) setLiveQuestions(data as MitingQuestion[]);
@@ -917,6 +1054,7 @@ export function AdminDashboardScreen() {
       const { data } = await supabase
         .from('MitingQuestions')
         .select('*')
+        .eq('election_cycle_id', visibleCycleId)
         .eq('is_approved', false)
         .order('created_at', { ascending: true });
       if (!cancelled && data) setPendingQuestions(data as MitingQuestion[]);
@@ -937,11 +1075,14 @@ export function AdminDashboardScreen() {
       cancelled = true;
       supabase.removeChannel(ch);
     };
-  }, [activeTab]);
+  }, [activeTab, visibleCycleId]);
 
   // ── Comment counts per post ───────────────────────────────────────────────
   useEffect(() => {
-    if (!posts.length) return;
+    if (!posts.length) {
+      setCommentCounts(prev => Object.keys(prev).length ? {} : prev);
+      return;
+    }
 
     const fetchCounts = async () => {
       const { data } = await supabase
@@ -1019,6 +1160,10 @@ export function AdminDashboardScreen() {
 
   // ── Miting session toggle ─────────────────────────────────────────────────
   const handleMitingToggle = () => {
+    if (!activeCycleId || visibleCycleId !== activeCycleId) {
+      Alert.alert('Read-only Cycle', 'Activate a cycle before changing Miting settings.');
+      return;
+    }
     if (isMitingActive) {
       Alert.alert(
         'End Miting Session?',
@@ -1052,7 +1197,10 @@ export function AdminDashboardScreen() {
             setIsStartingSession(true);
             try {
               if (prevCount > 0) {
-                const { data } = await supabase.from('MitingQuestions').select('id');
+                const { data } = await supabase
+                  .from('MitingQuestions')
+                  .select('id')
+                  .eq('election_cycle_id', activeCycleId);
                 const ids = (data ?? []).map((q: any) => q.id);
                 if (ids.length > 0) {
                   await supabase.from('MitingQuestions').delete().in('id', ids);
@@ -1075,6 +1223,10 @@ export function AdminDashboardScreen() {
 
   // ── Voting schedule save ──────────────────────────────────────────────────
   const handleVotingSave = async (start: string | null, end: string | null) => {
+    if (!activeCycleId || visibleCycleId !== activeCycleId) {
+      Alert.alert('Read-only Cycle', 'Activate this cycle before changing its voting schedule.');
+      return;
+    }
     try {
       await updateSettings({ voting_start_time: start, voting_end_time: end });
       Alert.alert('Success', 'Voting schedule updated successfully.');
@@ -1084,11 +1236,27 @@ export function AdminDashboardScreen() {
   };
 
   // ── Modal helpers ─────────────────────────────────────────────────────────
-  const openCreate = () => setModal({ visible: true, mode: 'create', post: null });
-  const openEdit   = (post: RawPost) => setModal({ visible: true, mode: 'edit', post });
+  const openCreate = () => {
+    if (!canEditVisibleCycle || !visibleCycleId) {
+      Alert.alert('Read-only Cycle', 'Select the active cycle before creating posts.');
+      return;
+    }
+    setModal({ visible: true, mode: 'create', post: null });
+  };
+  const openEdit = (post: RawPost) => {
+    if (!canEditVisibleCycle) {
+      Alert.alert('Read-only Cycle', 'Archived and closed cycles can only be browsed.');
+      return;
+    }
+    setModal({ visible: true, mode: 'edit', post });
+  };
   const closeModal = () => setModal(m => ({ ...m, visible: false }));
 
   const handleSave = async (payload: SavePayload, id?: string) => {
+    if (!visibleCycleId || !canEditVisibleCycle) {
+      Alert.alert('Read-only Cycle', 'Select the active cycle before saving posts.');
+      return;
+    }
     setIsSaving(true);
     try {
       let postId: string;
@@ -1100,6 +1268,7 @@ export function AdminDashboardScreen() {
           type: payload.type,
           title: payload.title,
           content: payload.content,
+          election_cycle_id: visibleCycleId,
         } as any) as any;
         postId = created.id;
       }
@@ -1116,6 +1285,10 @@ export function AdminDashboardScreen() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!canEditVisibleCycle) {
+      Alert.alert('Read-only Cycle', 'Archived and closed cycles can only be browsed.');
+      return;
+    }
     setDeletingId(id);
     try {
       await supabase.from('PollOptions').delete().eq('post_id', id);
@@ -1124,6 +1297,33 @@ export function AdminDashboardScreen() {
       Alert.alert('Error', e?.message ?? 'Could not delete post.');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleCreateCycle = async (label: string) => {
+    try {
+      const created = await createCycle(label);
+      setSelectedCycleId(created.id);
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Could not create election cycle.');
+    }
+  };
+
+  const handleCycleStatusChange = async (id: string, status: ElectionCycleStatus) => {
+    const existingActiveCycle = cycles.find(cycle => cycle.status === 'active');
+    if (status === 'active' && existingActiveCycle && existingActiveCycle.id !== id) {
+      Alert.alert(
+        'Active Cycle Exists',
+        `Close "${existingActiveCycle.label}" before activating another election cycle.`
+      );
+      return;
+    }
+
+    try {
+      await updateCycleStatus({ id, status });
+      setSelectedCycleId(id);
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Could not update election cycle.');
     }
   };
 
@@ -1227,13 +1427,24 @@ export function AdminDashboardScreen() {
       </ScrollView>
 
       {activeTab === 'voting' && (
-        <VotingControlPanel
-          settings={settings}
-          status={votingStatus}
-          isLoading={settingsLoading}
-          isSaving={isToggling}
-          onSave={handleVotingSave}
-        />
+        <>
+          <CycleControlPanel
+            cycles={cycles}
+            selectedCycleId={visibleCycleId}
+            activeCycleId={activeCycleId}
+            isBusy={isCycleBusy}
+            onSelect={setSelectedCycleId}
+            onCreate={handleCreateCycle}
+            onStatusChange={handleCycleStatusChange}
+          />
+          <VotingControlPanel
+            settings={visibleCycle ?? settings}
+            status={visibleVotingStatus}
+            isLoading={settingsLoading}
+            isSaving={isToggling}
+            onSave={handleVotingSave}
+          />
+        </>
       )}
 
       {activeTab === 'miting' && (

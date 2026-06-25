@@ -61,7 +61,7 @@ interface UseLiveResultsReturn {
 // HOOK
 // =============================================================================
 
-export function useLiveResults(): UseLiveResultsReturn {
+export function useLiveResults(cycleId?: string | null): UseLiveResultsReturn {
   const [positions, setPositions] = useState<LivePosition[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError]     = useState(false);
@@ -72,6 +72,10 @@ export function useLiveResults(): UseLiveResultsReturn {
       setIsLoading(true);  // ← add this
       setIsError(false);
       setError(null);
+      if (!cycleId) {
+        setPositions([]);
+        return;
+      }
 
       const { data: posData, error: posErr } = await supabase
         .from('Positions')
@@ -84,33 +88,24 @@ export function useLiveResults(): UseLiveResultsReturn {
         return;
       }
 
-      const { data: candData, error: candErr } = await supabase
-        .from('Candidates')
-        .select('id, name, partylist, position_id');
-      if (candErr) throw candErr;
+      const { data: tallyData, error: tallyErr } = await supabase.rpc('get_vote_tally', {
+        p_cycle_id: cycleId,
+      });
+      if (tallyErr) throw tallyErr;
 
-      const { data: voteData, error: voteErr } = await supabase
-        .from('Votes')
-        .select('candidate_id, position_id')
-        .eq('is_valid', true);
-      if (voteErr) throw voteErr;
-
-      const allVotes      = voteData      ?? [];
-      const allCandidates = candData      ?? [];
+      const tallyRows = tallyData ?? [];
 
       const enriched: LivePosition[] = posData.map(pos => {
-        const candidates: LiveCandidate[] = allCandidates
-          .filter(c => c.position_id === pos.id)
-          .map(c => ({
-            id:          c.id,
-            name:        c.name,
-            partylist:   c.partylist ?? '',
-            position_id: c.position_id,
-            votes:       allVotes.filter(v => v.candidate_id === c.id).length,
+        const positionRows = tallyRows.filter(row => row.position_id === pos.id);
+        const candidates: LiveCandidate[] = positionRows
+          .map(row => ({
+            id:          row.candidate_id,
+            name:        row.candidate_name,
+            partylist:   row.partylist ?? '',
+            position_id: row.position_id,
+            votes:       row.vote_count ?? 0,
           }))
           .sort((a, b) => b.votes - a.votes);
-
-        const positionVotes = allVotes.filter(v => v.position_id === pos.id);
 
         return {
           id:            pos.id,
@@ -118,7 +113,7 @@ export function useLiveResults(): UseLiveResultsReturn {
           display_order: pos.display_order,
           college:       pos.college || 'Executive Council', 
           candidates,
-          totalVotes:    positionVotes.length, 
+          totalVotes:    candidates.reduce((sum, c) => sum + c.votes, 0),
         };
       });
 
@@ -129,7 +124,7 @@ export function useLiveResults(): UseLiveResultsReturn {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [cycleId]);
 
   useEffect(() => {
     // Initial fetch

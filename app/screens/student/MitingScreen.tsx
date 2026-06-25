@@ -13,10 +13,10 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons }         from '@expo/vector-icons';
 import { useMitingQuestions, useStudentUpvotes, useUpvoteQuestion, useRemoveUpvote, useSubmitQuestion } from '../../hooks/useMiting';
 import { useAuthStore }     from '../../stores/authStore';
-import { supabase }         from '../../utils/supabase';
 import { notifyAdminAlert } from '../../notifications/notificationService';
 import { useThemeColors, ThemeColors } from '../../theme';
 import { useThemeStore }    from '../../stores/themeStore';
+import { useSettings }      from '../../hooks/useSettings';
 
 interface Question {
   id: string; question_text: string; upvote_count: number;
@@ -90,8 +90,9 @@ export function MitingScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const s      = useMemo(() => makeStyles(C), [C]);
 
-  const { userProfile } = useAuthStore();
+  const { userProfile, activeCycleId } = useAuthStore();
   const userId = userProfile?.id ?? '';
+  const { settings } = useSettings();
 
   // Pass userId to fetch their specific pending questions
   const { data: questions, isLoading, refetch } = useMitingQuestions(userId) as { data: Question[] | undefined, isLoading: boolean, refetch: () => Promise<any> };
@@ -104,9 +105,11 @@ export function MitingScreen() {
   const [draft,          setDraft]        = useState('');
   const [submitting,     setSubmitting]   = useState(false);
   const [upvotedIds,     setUpvotedIds]   = useState<Set<string>>(new Set());
-  const [isMitingActive, setMitingActive] = useState(false);
   const [showToast,      setShowToast]    = useState(false);
   const [isRefreshing,   setIsRefreshing] = useState(false);
+  // Miting activity is cycle-owned through ElectionCycles.is_miting_active.
+  const isMitingActive = !!activeCycleId && !!settings?.is_miting_active;
+  const previousMitingActive = useRef(isMitingActive);
 
   const inputRef  = useRef<TextInput>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -126,24 +129,11 @@ export function MitingScreen() {
   }, []);
 
   useEffect(() => {
-    supabase.from('SystemSettings').select('is_miting_active').limit(1).maybeSingle()
-      .then(({ data }: { data: any }) => setMitingActive(!!(data as any)?.is_miting_active));
-
-    const ch = supabase
-      .channel('miting-settings')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'SystemSettings' },
-        (payload: any) => {
-          const next = payload.new as any;
-          const prev = payload.old as any;
-          setMitingActive(!!next.is_miting_active);
-          if (!prev.is_miting_active && next.is_miting_active) {
-            notifyAdminAlert('🎤 Miting de Avance is now live! Submit your questions.');
-          }
-        })
-      .subscribe();
-
-    return () => { supabase.removeChannel(ch); };
-  }, []);
+    if (!previousMitingActive.current && isMitingActive) {
+      notifyAdminAlert('Miting de Avance is now live! Submit your questions.');
+    }
+    previousMitingActive.current = isMitingActive;
+  }, [isMitingActive]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -189,13 +179,18 @@ export function MitingScreen() {
   const qLabel    = qCount === 1 ? '1 question' : `${qCount} questions`;
 
   if (!isMitingActive) {
+    const inactiveTitle = activeCycleId ? 'Not Live Yet' : 'No Active Election';
+    const inactiveBody = activeCycleId
+      ? "Miting de Avance hasn't started.\nYou'll get a notification when it goes live."
+      : "No active election cycle is available yet.\nMiting questions will open with the active cycle.";
+
     return (
       <SafeAreaView style={s.safe}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
         <View style={s.center}>
           <View style={s.inactiveIcon}><Ionicons name="mic-off-outline" size={40} color={C.textMuted} /></View>
-          <Text style={s.inactiveTitle}>Not Live Yet</Text>
-          <Text style={s.inactiveBody}>Miting de Avance hasn't started.{'\n'}You'll get a notification when it goes live.</Text>
+          <Text style={s.inactiveTitle}>{inactiveTitle}</Text>
+          <Text style={s.inactiveBody}>{inactiveBody}</Text>
         </View>
       </SafeAreaView>
     );
