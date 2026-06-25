@@ -20,6 +20,7 @@ import { supabase } from '../../utils/supabase';
 import { useDeleteCandidate } from '../../hooks/useCandidates';
 import { uploadCandidatePhoto, isLocalFileUri } from '../../utils/storage';
 import { usePositions } from '../../hooks/usePositions';
+import { useElectionCycles } from '../../hooks/useElectionCycles';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -742,7 +743,8 @@ const CandidateCard: React.FC<{
   onView:    () => void;
   onEdit:    () => void;
   onDelete:  () => void;
-}> = ({ candidate, onView, onEdit, onDelete }) => {
+  isReadOnly: boolean;
+}> = ({ candidate, onView, onEdit, onDelete, isReadOnly }) => {
   const C = useThemeColors();
   const S = useMemo(() => makeStyles(C), [C]);
 
@@ -777,9 +779,11 @@ const CandidateCard: React.FC<{
           style={({ pressed }) => [
             S.card.actionBtn,
             S.card.editBtn,
-            pressed && { opacity: 0.75 },
+            isReadOnly && { opacity: 0.4 },
+            !isReadOnly && pressed && { opacity: 0.75 },
           ]}
           onPress={onEdit}
+          disabled={isReadOnly}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
           <Ionicons name="create-outline" size={18} style={S.card.actionIcon} color={C.text} />
@@ -789,9 +793,11 @@ const CandidateCard: React.FC<{
           style={({ pressed }) => [
             S.card.actionBtn,
             S.card.deleteBtn,
-            pressed && { opacity: 0.75 },
+            isReadOnly && { opacity: 0.4 },
+            !isReadOnly && pressed && { opacity: 0.75 },
           ]}
           onPress={onDelete}
+          disabled={isReadOnly}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
           <Ionicons name="trash-outline" size={18} style={S.card.actionIcon} color={C.text} />
@@ -848,6 +854,9 @@ function AdminCandidatesScreen() {
   const S = useMemo(() => makeStyles(C), [C]);
   const queryClient = useQueryClient();
   const activeCycleId = useAuthStore(state => state.activeCycleId);
+  const { data: cycles = [] } = useElectionCycles();
+  const activeCycle = cycles.find(c => c.id === activeCycleId) ?? null;
+  const isCycleReadOnly = !activeCycleId || activeCycle?.status === 'closed' || activeCycle?.status === 'archived';
   useFocusEffect(
     useCallback(() => {
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
@@ -886,23 +895,13 @@ function AdminCandidatesScreen() {
 
   const deleteMutation = useMutation({
     mutationFn: async (candidateId: string) => {
-      // Step 1: Nullify votes referencing this candidate
-      // (sets candidate_id to NULL rather than deleting votes,
-      //  preserving the voter turnout count and audit trail)
-      const { error: voteError } = await supabase
-        .from('Votes')
-        .update({ candidate_id: null })
-        .eq('candidate_id', candidateId);
-
-      if (voteError) throw new Error(`Failed to unlink votes: ${voteError.message}`);
-
-      // Step 2: Now safe to delete the candidate
-      const { error: deleteError } = await supabase
-        .from('Candidates')
-        .delete()
-        .eq('id', candidateId);
-
-      if (deleteError) throw new Error(`Failed to delete candidate: ${deleteError.message}`);
+      if (isCycleReadOnly) throw new Error('Closed and archived cycles are read-only.');
+      const { data, error } = await supabase.rpc('delete_candidate', {
+        p_candidate_id: candidateId,
+      });
+      if (error) throw error;
+      const result = data as { success: boolean; error?: string } | null;
+      if (result && !result.success) throw new Error(result.error || 'Failed to delete candidate');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
@@ -1005,12 +1004,20 @@ function AdminCandidatesScreen() {
   // ─── Handlers ─────────────────────────────────────────────────────────────
 
   const openAdd = useCallback(() => {
+    if (isCycleReadOnly) {
+      Alert.alert('Read-only Cycle', 'Activate a draft cycle before adding candidates.');
+      return;
+    }
     setEditId(null);
     setFormInitial({ ...EMPTY_FORM });
     setFormVisible(true);
-  }, []);
+  }, [isCycleReadOnly]);
 
   const openEdit = useCallback((c: Candidate) => {
+    if (isCycleReadOnly) {
+      Alert.alert('Read-only Cycle', 'Closed and archived cycles can only be browsed.');
+      return;
+    }
     setEditId(c.id);
     setFormInitial({
       name:        c.name,
@@ -1024,9 +1031,13 @@ function AdminCandidatesScreen() {
       photo_uri:   c.photo_url,
     });
     setFormVisible(true);
-  }, []);
+  }, [isCycleReadOnly]);
 
   const confirmDelete = useCallback((c: Candidate) => {
+    if (isCycleReadOnly) {
+      Alert.alert('Read-only Cycle', 'Closed and archived cycles can only be browsed.');
+      return;
+    }
     Alert.alert(
       'Delete Candidate',
       `Remove "${c.name}" from the ballot? Any votes cast for this candidate will be unlinked. This cannot be undone.`,
@@ -1039,12 +1050,12 @@ function AdminCandidatesScreen() {
         },
       ],
     );
-  }, [deleteMutation]);
+  }, [deleteMutation, isCycleReadOnly]);
 
   const handleSave = useCallback(async (id: string | null, data: FormState) => {
     if (!data.department || !data.position) return;
-    if (!activeCycleId) {
-      Alert.alert('No Active Election', 'Create or activate an election cycle before adding candidates.');
+    if (!activeCycleId || isCycleReadOnly) {
+      Alert.alert('Read-only Cycle', 'Create or activate an election cycle before changing candidates.');
       return;
     }
     try {
@@ -1113,7 +1124,7 @@ function AdminCandidatesScreen() {
     } catch (err: any) {
       Alert.alert('Save Failed', err.message || 'An unexpected error occurred.');
     }
-  }, [dbPositions, addMutation, updateMutation, queryClient, activeCycleId]);
+  }, [dbPositions, addMutation, updateMutation, queryClient, activeCycleId, isCycleReadOnly]);
 
   // ─── Position/Department CRUD (live in parent, passed as props) ───────────
 
@@ -1235,9 +1246,10 @@ function AdminCandidatesScreen() {
         onView={() => setViewedCandidate(c)}
         onEdit={() => openEdit(c)}
         onDelete={() => confirmDelete(c)}
+        isReadOnly={isCycleReadOnly}
       />
     )),
-  [openEdit, confirmDelete]);
+  [openEdit, confirmDelete, isCycleReadOnly]);
 
   // ─── Main UI ──────────────────────────────────────────────────────────────
 
@@ -1251,7 +1263,11 @@ function AdminCandidatesScreen() {
             {candidates.length} registered · {DEPARTMENTS.length} departments
           </Text>
         </View>
-        <Pressable style={({ pressed }) => [S.screen.addBtn, pressed && { opacity: 0.88 }]} onPress={openAdd}>
+        <Pressable
+          style={({ pressed }) => [S.screen.addBtn, isCycleReadOnly && { opacity: 0.45 }, !isCycleReadOnly && pressed && { opacity: 0.88 }]}
+          onPress={openAdd}
+          disabled={isCycleReadOnly}
+        >
           <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800', lineHeight: 18 }}>＋</Text>
           <Text style={S.screen.addBtnText}>Add</Text>
         </Pressable>
@@ -1301,7 +1317,13 @@ function AdminCandidatesScreen() {
                       program={program}
                       positionId={positionId}
                       isDisabled={isDisabled}
-                      onToggle={() => togglePositionDisabled(positionId)}
+                      onToggle={() => {
+                        if (isCycleReadOnly) {
+                          Alert.alert('Read-only Cycle', 'Closed and archived cycles can only be browsed.');
+                          return;
+                        }
+                        togglePositionDisabled(positionId);
+                      }}
                     />
 
                     {isDisabled && (

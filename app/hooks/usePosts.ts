@@ -2,17 +2,21 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../utils/supabase';
 
 // GET /posts — feed
-export function usePosts() {
+export function usePosts(cycleId?: string | null) {
   return useQuery({
-    queryKey: ['posts'],
+    queryKey: ['posts', cycleId],
     queryFn: async () => {
+      if (!cycleId) return [];
+
       const { data, error } = await supabase
         .from('Posts')
         .select('*, PollOptions(*)')
+        .eq('election_cycle_id', cycleId)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data;
     },
+    enabled: !!cycleId,
   });
 }
 
