@@ -22,6 +22,7 @@ import {
   addNotificationResponseReceivedListener,
 } from './app/notifications/notificationService';
 import { useAuthStore } from './app/stores/authStore';
+import { useVotingStore } from './app/stores/votingStore';
 import { hydrateTheme } from './app/stores/themeStore';
 
 export default function App() {
@@ -138,6 +139,16 @@ export default function App() {
       unsubscribe();
       subscription.unsubscribe();
     };
+  }, []);
+
+  useEffect(() => {
+    let previousActiveCycleId = useAuthStore.getState().activeCycleId;
+
+    return useAuthStore.subscribe((state) => {
+      if (state.activeCycleId === previousActiveCycleId) return;
+      previousActiveCycleId = state.activeCycleId;
+      useVotingStore.getState().reset();
+    });
   }, []);
 
   return (
