@@ -43,3 +43,6 @@ app-example
 # OS
 .DS_Store
 Thumbs.db
+
+#Development
+TASKS.md

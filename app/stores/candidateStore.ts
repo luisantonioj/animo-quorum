@@ -992,13 +992,13 @@ interface CandidateStore {
   /** All candidates belonging to a specific department */
   getCandidatesForDepartment: (department: Department) => Candidate[];
   /**
-   * Returns ballot positions (with their candidates) visible to the given
-   * voter's department.
-   *   - Executive positions are included for every department.
-   *   - Department positions are included only for the matching department.
+   * Returns ballot positions (with their candidates) visible to the given voter.
+   *   - Executive Council positions → all students
+   *   - Department positions (program = null) → matching department only
+   *   - Program Coordinator positions (program non-null) → matching dept AND matching program
    *   - Disabled positions are excluded entirely.
    */
-  getCandidatesForBallot: (voterDepartment: Exclude<Department, 'Executive Council'>) => BallotPosition[];
+  getCandidatesForBallot: (voterDepartment: Exclude<Department, 'Executive Council'>, voterProgram: string | null) => BallotPosition[];
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -1044,14 +1044,14 @@ export const useCandidateStore = create<CandidateStore>((set, get) => ({
     return candidates.filter((c) => c.department === department);
   },
 
-  getCandidatesForBallot: (voterDepartment) => {
+  getCandidatesForBallot: (voterDepartment, voterProgram) => {
     const { candidates, disabledPositions } = get();
 
-    // Determine which candidates are visible to this voter
     const visible = candidates.filter((c) => {
-      const isExec = c.department === 'Executive Council';
-      const isDeptMatch = c.department === voterDepartment;
-      return isExec || isDeptMatch;
+      if (c.department === 'Executive Council') return true;
+      if (c.department !== voterDepartment) return false;
+      if ((c.program ?? null) === null) return true;
+      return (c.program ?? null) === voterProgram;
     });
 
     // Group by position_id, preserving display order

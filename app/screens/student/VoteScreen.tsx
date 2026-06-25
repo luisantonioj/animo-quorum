@@ -179,6 +179,7 @@ const PositionCard: React.FC<{
       <View style={s.positionHeader}>
         <View style={s.positionMeta}>
           <Text style={s.positionName}>{ballotPosition.position_name}</Text>
+          {ballotPosition.program ? <Text style={s.positionProgram}>{ballotPosition.program}</Text> : null}
           <Text style={s.positionCount}>{ballotPosition.candidates.length} candidate{ballotPosition.candidates.length !== 1 ? 's' : ''}</Text>
         </View>
         {isDone
@@ -844,6 +845,7 @@ function makeStyles(C: ThemeColors) {
     positionHeader:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderBottomWidth: 1, borderBottomColor: C.border },
     positionMeta:     { gap: 2 },
     positionName:     { fontSize: 14, fontWeight: '700', color: C.text },
+    positionProgram:  { fontSize: 11, color: C.textSub, marginTop: 1 },
     positionCount:    { fontSize: 11, color: C.textMuted },
 
     doneBadge:        { flexDirection: 'row', alignItems: 'center', backgroundColor: C.greenLight, borderRadius: 20, paddingHorizontal: 9, paddingVertical: 4, borderWidth: 1, borderColor: C.greenBright + '44' },
