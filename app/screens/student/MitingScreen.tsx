@@ -13,10 +13,10 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons }         from '@expo/vector-icons';
 import { useMitingQuestions, useStudentUpvotes, useUpvoteQuestion, useRemoveUpvote, useSubmitQuestion } from '../../hooks/useMiting';
 import { useAuthStore }     from '../../stores/authStore';
-import { supabase }         from '../../utils/supabase';
 import { notifyAdminAlert } from '../../notifications/notificationService';
 import { useThemeColors, ThemeColors } from '../../theme';
 import { useThemeStore }    from '../../stores/themeStore';
+import { useSettings }      from '../../hooks/useSettings';
 
 interface Question {
   id: string; question_text: string; upvote_count: number;
@@ -92,6 +92,7 @@ export function MitingScreen() {
 
   const { userProfile } = useAuthStore();
   const userId = userProfile?.id ?? '';
+  const { settings } = useSettings();
 
   // Pass userId to fetch their specific pending questions
   const { data: questions, isLoading, refetch } = useMitingQuestions(userId) as { data: Question[] | undefined, isLoading: boolean, refetch: () => Promise<any> };
@@ -104,9 +105,10 @@ export function MitingScreen() {
   const [draft,          setDraft]        = useState('');
   const [submitting,     setSubmitting]   = useState(false);
   const [upvotedIds,     setUpvotedIds]   = useState<Set<string>>(new Set());
-  const [isMitingActive, setMitingActive] = useState(false);
   const [showToast,      setShowToast]    = useState(false);
   const [isRefreshing,   setIsRefreshing] = useState(false);
+  const isMitingActive = !!settings?.is_miting_active;
+  const previousMitingActive = useRef(isMitingActive);
 
   const inputRef  = useRef<TextInput>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -126,24 +128,11 @@ export function MitingScreen() {
   }, []);
 
   useEffect(() => {
-    supabase.from('SystemSettings').select('is_miting_active').limit(1).maybeSingle()
-      .then(({ data }: { data: any }) => setMitingActive(!!(data as any)?.is_miting_active));
-
-    const ch = supabase
-      .channel('miting-settings')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'SystemSettings' },
-        (payload: any) => {
-          const next = payload.new as any;
-          const prev = payload.old as any;
-          setMitingActive(!!next.is_miting_active);
-          if (!prev.is_miting_active && next.is_miting_active) {
-            notifyAdminAlert('🎤 Miting de Avance is now live! Submit your questions.');
-          }
-        })
-      .subscribe();
-
-    return () => { supabase.removeChannel(ch); };
-  }, []);
+    if (!previousMitingActive.current && isMitingActive) {
+      notifyAdminAlert('Miting de Avance is now live! Submit your questions.');
+    }
+    previousMitingActive.current = isMitingActive;
+  }, [isMitingActive]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
