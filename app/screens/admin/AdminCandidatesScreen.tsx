@@ -26,8 +26,10 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   useCandidateStore,
   DEPARTMENTS,
+  PROGRAMS,
+  PROGRAM_COORDINATOR_POSITION,
 } from '../../stores/candidateStore';
-import type { Candidate, Department, Position } from '../../stores/candidateStore';
+import type { Candidate, Department, Position, VoterDepartment } from '../../stores/candidateStore';
 
 import { CandidateModal } from '../../components/CandidateModal';
 import type { CandidateRow } from '../../components/CandidateModal';
@@ -47,6 +49,7 @@ interface FormState {
   partylist:   string;
   department:  string;
   position:    string;
+  program:     string;
   email:       string;
   credentials: string;
   platform:    string;
@@ -66,6 +69,7 @@ interface ParsedPosition {
   position_name: string;
   department:    string;
   clean_name:    string;
+  program:       string | null;
 }
 
 const EMPTY_FORM: FormState = {
@@ -73,6 +77,7 @@ const EMPTY_FORM: FormState = {
   partylist:   '',
   department:  '',
   position:    '',
+  program:     '',
   email:       '',
   credentials: '',
   platform:    '',
@@ -130,6 +135,14 @@ function validateForm(
 
   if (!form.department) errors.department = 'Department is required.';
   if (!form.position)   errors.position   = 'Position is required.';
+  if (
+    form.department &&
+    form.department !== 'Executive Council' &&
+    form.position === PROGRAM_COORDINATOR_POSITION &&
+    !form.program
+  ) {
+    errors.position = 'Program is required for Program Coordinator.';
+  }
 
   if (form.email.trim()) {
     const dlslEmailRegex = /^[^\s@]+@dlsl\.edu\.ph$/i;
@@ -144,7 +157,8 @@ function validateForm(
         c.id !== editId &&
         c.name.trim().toLowerCase() === trimmedName.toLowerCase() &&
         c.department === form.department &&
-        c.position_name === form.position,
+        c.position_name === form.position &&
+        (c.program ?? '') === (form.program ?? ''),
     );
     if (isDuplicate) {
       errors.duplicate = `"${trimmedName}" already exists under ${form.department} — ${form.position}.`;
@@ -373,7 +387,13 @@ const CandidateFormSheet: React.FC<{
   const setField = useCallback((field: keyof FormState, value: string | null) => {
     setFormState(prev => {
       const next: FormState = { ...prev, [field]: value ?? '' };
-      if (field === 'department') next.position = '';
+      if (field === 'department') {
+        next.position = '';
+        next.program = '';
+      }
+      if (field === 'position' && value !== PROGRAM_COORDINATOR_POSITION) {
+        next.program = '';
+      }
       return next;
     });
   }, []);
@@ -410,14 +430,19 @@ const CandidateFormSheet: React.FC<{
     const fromProps = parsedPositions
       .filter(p => p.department === form.department)
       .map(p => p.clean_name);
-    return Array.from(new Set([...fromProps, ...localExtraPositions]));
+    const basePositions = form.department === 'Executive Council'
+      ? []
+      : [PROGRAM_COORDINATOR_POSITION];
+    return Array.from(new Set([...fromProps, ...basePositions, ...localExtraPositions]));
   }, [form.department, parsedPositions, localExtraPositions]);
 
   // Replace the existing handleAddPosition in CandidateFormSheet:
   const handleAddPosition = useCallback(async (cleanName: string) => {
     if (!form.department) return;
     try {
-      await onAddPosition(form.department, cleanName);
+      if (cleanName !== PROGRAM_COORDINATOR_POSITION) {
+        await onAddPosition(form.department, cleanName);
+      }
       setLocalExtraPositions(prev => [...prev, cleanName]);
     } catch (err: any) {
       Alert.alert('Add Failed', err.message); // now shows real Supabase error
@@ -427,6 +452,13 @@ const CandidateFormSheet: React.FC<{
 
   const handleDeletePosition = useCallback(async (cleanName: string) => {
     if (!form.department) return;
+    if (cleanName === PROGRAM_COORDINATOR_POSITION) {
+      Alert.alert(
+        'Program Coordinator',
+        'Program Coordinator rows are tied to specific programs. Leave them in place and assign candidates through the Program field.',
+      );
+      return;
+    }
     try {
       await onDeletePosition(form.department, cleanName);
       setLocalExtraPositions(prev => prev.filter(p => p !== cleanName));
@@ -444,9 +476,24 @@ const CandidateFormSheet: React.FC<{
   const isValid = Object.keys(currentErrors).length === 0
     && form.name.trim().length >= 3
     && !!form.department
-    && !!form.position;
+    && !!form.position
+    && (
+      form.position !== PROGRAM_COORDINATOR_POSITION ||
+      form.department === 'Executive Council' ||
+      !!form.program
+    );
 
   const visibleErrors: FormErrors = saveAttempted ? currentErrors : {};
+  const programOptions = useMemo(() => {
+    if (
+      !form.department ||
+      form.department === 'Executive Council' ||
+      form.position !== PROGRAM_COORDINATOR_POSITION
+    ) {
+      return [];
+    }
+    return PROGRAMS[form.department as VoterDepartment] ?? [];
+  }, [form.department, form.position]);
 
   const handlePickPhoto = useCallback(async () => {
     try {
@@ -591,6 +638,31 @@ const CandidateFormSheet: React.FC<{
           )}
           {visibleErrors.position ? <Text style={{ fontSize: FONT.xs, color: C.red, marginTop: 3 }}>{visibleErrors.position}</Text> : null}
 
+          {programOptions.length > 0 ? (
+            <>
+              <Text style={S.form.fieldLabel}>Program *</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.form.positionScrollRow}>
+                <View style={S.form.positionInnerRow}>
+                  {programOptions.map(program => (
+                    <Pressable
+                      key={program}
+                      style={({ pressed }) => [
+                        S.form.positionTab,
+                        form.program === program && S.form.positionTabActive,
+                        pressed && { opacity: 0.85 },
+                      ]}
+                      onPress={() => setField('program', program)}
+                    >
+                      <Text style={[S.form.positionTabText, form.program === program && S.form.positionTabTextActive]}>
+                        {program}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </ScrollView>
+            </>
+          ) : null}
+
           {/* Duplicate warning */}
           {visibleErrors.duplicate ? (
             <View style={{ backgroundColor: C.redGlow, borderRadius: RADIUS.md, borderWidth: 1, borderColor: 'rgba(239,68,68,0.35)', padding: SPACE.sm, marginTop: SPACE.xs }}>
@@ -732,18 +804,20 @@ const CandidateCard: React.FC<{
 
 const PositionHeader: React.FC<{
   positionName: string;
+  program?:     string | null;
   positionId:   string;
   isDisabled:   boolean;
   onToggle:     () => void;
-}> = ({ positionName, positionId: _positionId, isDisabled, onToggle }) => {
+}> = ({ positionName, program, positionId: _positionId, isDisabled, onToggle }) => {
   const C = useThemeColors();
+  const displayName = program ? `${positionName} - ${program}` : positionName;
 
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: SPACE.sm, marginBottom: SPACE.xs }}>
       <Text style={{ fontSize: FONT.xs, fontWeight: '700', letterSpacing: 1.2, color: isDisabled ? C.textMuted : C.textSub, textTransform: 'uppercase', flex: 1, marginRight: SPACE.sm }}
         numberOfLines={1}
       >
-        {positionName}
+        {displayName}
       </Text>
       <Pressable
         onPress={onToggle}
@@ -790,7 +864,7 @@ function AdminCandidatesScreen() {
       const cleanName = dept !== 'Executive Council' && p.position_name.startsWith(dept + ' ')
         ? p.position_name.slice(dept.length + 1)
         : p.position_name;
-      return { id: p.id, position_name: p.position_name, department: dept, clean_name: cleanName };
+      return { id: p.id, position_name: p.position_name, department: dept, clean_name: cleanName, program: p.program ?? null };
     });
   }, [dbPositions]);
 
@@ -868,6 +942,7 @@ function AdminCandidatesScreen() {
         position_id:   c.position_id,
         position_name: posName as Position,
         department:    dept as Department,
+        program:       posRow?.program ?? null,
         photo_url:     c.photo_url,
         email:         c.email,
         credentials:   c.credentials,
@@ -885,7 +960,7 @@ function AdminCandidatesScreen() {
   const [viewedCandidate, setViewedCandidate] = useState<Candidate | null>(null);
 
   const grouped = useMemo(() => {
-    const deptMap: Record<string, { positionName: string; positionId: string; items: Candidate[] }[]> = {};
+    const deptMap: Record<string, { positionName: string; program: string | null; positionId: string; items: Candidate[] }[]> = {};
 
     for (const pos of dbPositions) {
       const dept      = pos.college || 'Executive Council';
@@ -896,6 +971,7 @@ function AdminCandidatesScreen() {
       if (!deptMap[dept]) deptMap[dept] = [];
       deptMap[dept].push({
         positionName: shortName,
+        program:      pos.program ?? null,
         positionId:   pos.id,
         items:        candidates.filter(c => c.position_id === pos.id),
       });
@@ -936,6 +1012,7 @@ function AdminCandidatesScreen() {
       partylist:   c.partylist   ?? '',
       department:  c.department,
       position:    c.position_name,
+      program:     c.program ?? '',
       email:       c.email       ?? '',
       credentials: c.credentials ?? '',
       platform:    c.platform    ?? '',
@@ -965,13 +1042,23 @@ function AdminCandidatesScreen() {
       const expectedPosName = data.department === 'Executive Council'
         ? data.position
         : `${data.department} ${data.position}`;
+      const expectedProgram = data.position === PROGRAM_COORDINATOR_POSITION && data.department !== 'Executive Council'
+        ? data.program
+        : null;
 
-      let posId = dbPositions.find(p => p.position_name === expectedPosName)?.id;
+      let posId = dbPositions.find(p =>
+        p.position_name === expectedPosName &&
+        (p.program ?? null) === expectedProgram
+      )?.id;
 
       if (!posId) {
         const { data: newPos, error } = await supabase
           .from('Positions')
-          .insert([{ position_name: expectedPosName, college: data.department === 'Executive Council' ? null : data.department }])
+          .insert([{
+            position_name: expectedPosName,
+            college: data.department === 'Executive Council' ? null : data.department,
+            program: expectedProgram,
+          }])
           .select()
           .single();
         if (error) throw new Error(`Failed to create position: ${error.message}`);
@@ -1195,12 +1282,13 @@ function AdminCandidatesScreen() {
                 </Text>
               )}
 
-              {positionGroups.map(({ positionName, positionId, items }) => {
+              {positionGroups.map(({ positionName, program, positionId, items }) => {
                 const isDisabled = disabledPositions.has(positionId);
                 return (
                   <View key={positionId}>
                     <PositionHeader
                       positionName={positionName}
+                      program={program}
                       positionId={positionId}
                       isDisabled={isDisabled}
                       onToggle={() => togglePositionDisabled(positionId)}

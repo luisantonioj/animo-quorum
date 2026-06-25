@@ -133,6 +133,13 @@ export type Database = {
             referencedRelation: "Posts"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "Comments_student_id_fkey1"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "Users"
+            referencedColumns: ["auth_id"]
+          },
         ]
       }
       Likes: {
@@ -285,6 +292,7 @@ export type Database = {
           display_order: number
           id: string
           position_name: string
+          program: string | null
         }
         Insert: {
           college?: string | null
@@ -292,6 +300,7 @@ export type Database = {
           display_order?: number
           id?: string
           position_name: string
+          program?: string | null
         }
         Update: {
           college?: string | null
@@ -299,6 +308,7 @@ export type Database = {
           display_order?: number
           id?: string
           position_name?: string
+          program?: string | null
         }
         Relationships: []
       }

@@ -26,8 +26,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../utils/supabase';
 
 import { useAuthStore } from '../../stores/authStore';
-import { useCandidateStore, DEPARTMENTS, EXECUTIVE_POSITIONS, DEPARTMENT_POSITIONS } from '../../stores/candidateStore';
-import type { Candidate, Department, BallotPosition, Position } from '../../stores/candidateStore';
+import { useCandidateStore, DEPARTMENTS, EXECUTIVE_POSITIONS, DEPARTMENT_POSITIONS, PROGRAM_COORDINATOR_POSITION, PROGRAMS } from '../../stores/candidateStore';
+import type { Candidate, Department, BallotPosition, Position, VoterDepartment } from '../../stores/candidateStore';
 import { useVotingStore } from '../../stores/votingStore';
 import { CandidateModal } from '../../components/CandidateModal';
 import type { CandidateRow } from '../../components/CandidateModal';
@@ -46,7 +46,6 @@ const VoteContext = createContext<VoteCtx>(null as any);
 const useVC = () => useContext(VoteContext);
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
-type VoterDepartment = Exclude<Department, 'Executive Council'>;
 type Phase = 'setup' | 'ballot' | 'success' | 'already_voted';
 interface ConfirmEntry {
   positionName: string;
@@ -180,6 +179,7 @@ const PositionCard: React.FC<{
       <View style={s.positionHeader}>
         <View style={s.positionMeta}>
           <Text style={s.positionName}>{ballotPosition.position_name}</Text>
+          {ballotPosition.program ? <Text style={s.positionProgram}>{ballotPosition.program}</Text> : null}
           <Text style={s.positionCount}>{ballotPosition.candidates.length} candidate{ballotPosition.candidates.length !== 1 ? 's' : ''}</Text>
         </View>
         {isDone
@@ -324,13 +324,16 @@ const ConfirmModal: React.FC<{
 const SetupScreen: React.FC<{
   selectedDept: VoterDepartment | null;
   onSelectDept: (d: VoterDepartment) => void;
+  selectedProgram: string | null;
+  onSelectProgram: (p: string) => void;
   consented: boolean;
   onToggleConsent: () => void;
   onBegin: () => void;
   isLoading: boolean;
-}> = ({ selectedDept, onSelectDept, consented, onToggleConsent, onBegin, isLoading }) => {
+}> = ({ selectedDept, onSelectDept, selectedProgram, onSelectProgram, consented, onToggleConsent, onBegin, isLoading }) => {
   const { C, s } = useVC();
-  const canBegin = !!selectedDept && consented && !isLoading;
+  const canBegin = !!selectedDept && !!selectedProgram && consented && !isLoading;
+  const programs = selectedDept ? PROGRAMS[selectedDept] : [];
 
   return (
     <ScrollView
@@ -365,6 +368,28 @@ const SetupScreen: React.FC<{
         </View>
       </View>
 
+      {selectedDept && (
+        <View style={s.setupSection}>
+          <Text style={s.setupSectionLabel}>Your Program *</Text>
+          <Text style={s.setupSectionHint}>Determines which program coordinator position appears on your ballot.</Text>
+          <View style={s.deptGrid}>
+            {programs.map(p => (
+              <Pressable
+                key={p}
+                style={({ pressed }) => [
+                  s.deptChip,
+                  selectedProgram === p && s.deptChipActive,
+                  pressed && { opacity: 0.85 },
+                ]}
+                onPress={() => onSelectProgram(p)}
+              >
+                <Text style={[s.deptChipText, selectedProgram === p && s.deptChipTextActive]}>{p}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      )}
+
       <View style={s.setupSection}>
         <Text style={s.setupSectionLabel}>Voter Consent *</Text>
         <Pressable style={({ pressed }) => [s.consentRow, pressed && { opacity: 0.85 }]} onPress={onToggleConsent}>
@@ -380,6 +405,8 @@ const SetupScreen: React.FC<{
 
       {!selectedDept ? (
         <View style={s.warnBox}><Ionicons name="alert-circle-outline" size={14} color={C.amber} /><Text style={s.warnText}>Please select your department to continue.</Text></View>
+      ) : !selectedProgram ? (
+        <View style={s.warnBox}><Ionicons name="alert-circle-outline" size={14} color={C.amber} /><Text style={s.warnText}>Please select your program to continue.</Text></View>
       ) : !consented ? (
         <View style={s.warnBox}><Ionicons name="alert-circle-outline" size={14} color={C.amber} /><Text style={s.warnText}>Please check the consent box to continue.</Text></View>
       ) : null}
@@ -446,9 +473,15 @@ export function VoteScreen() {
   const disabledPositions = useCandidateStore(state => state.disabledPositions);
   const { selectedCandidates, selectCandidate, reset } = useVotingStore();
 
-  const [phase, setPhase]               = useState<Phase>('setup');
-  const [selectedDept, setSelectedDept] = useState<VoterDepartment | null>(null);
-  const [consented, setConsented]       = useState(false);
+  const [phase, setPhase]                   = useState<Phase>('setup');
+  const [selectedDept, setSelectedDept]     = useState<VoterDepartment | null>(null);
+  const [selectedProgram, setSelectedProgram] = useState<string | null>(null);
+  const [consented, setConsented]           = useState(false);
+
+  const handleSelectDept = useCallback((d: VoterDepartment) => {
+    setSelectedDept(d);
+    setSelectedProgram(null);
+  }, []);
   const [viewedCandidate, setViewedCandidate] = useState<Candidate | null>(null);
   const [confirmVisible, setConfirmVisible]   = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -465,7 +498,7 @@ export function VoteScreen() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('Candidates')
-        .select('*, Positions(position_name, college)'); // ← add college here
+        .select('*, Positions(position_name, college, program)');
       if (error) throw error;
       return data;
     },
@@ -520,6 +553,7 @@ export function VoteScreen() {
       const college      = c.Positions?.college as string | null;
       const dept: Department = college ? college as Department : 'Executive Council';
       const fullPosName  = c.Positions?.position_name || '';
+      const prog: string | null = c.Positions?.program ?? null;
 
       // Strip the college prefix from the display name, same as AdminCandidatesScreen
       const posName =
@@ -534,6 +568,7 @@ export function VoteScreen() {
         position_id:   c.position_id,
         position_name: posName as Position,
         department:    dept,
+        program:       prog,
         photo_url:     c.photo_url,
         email:         c.email,
         credentials:   c.credentials,
@@ -542,11 +577,12 @@ export function VoteScreen() {
     });
   }, [dbCandidates]);
 
-  const getCandidatesForBallot = useCallback((voterDepartment: VoterDepartment): BallotPosition[] => {
+  const getCandidatesForBallot = useCallback((voterDepartment: VoterDepartment, voterProgram: string | null): BallotPosition[] => {
     const visible = candidates.filter((c) => {
-      const isExec      = c.department === 'Executive Council';
-      const isDeptMatch = c.department === voterDepartment;
-      return isExec || isDeptMatch;
+      if (c.department === 'Executive Council') return true;   // (3) council execs — all students
+      if (c.department !== voterDepartment) return false;       // wrong dept — excluded
+      if ((c.program ?? null) === null) return true;            // (2) dept exec — no program tag
+      return (c.program ?? null) === voterProgram;              // (1) own program coordinator only
     });
 
     const positionMap = new Map<string, BallotPosition>();
@@ -559,6 +595,7 @@ export function VoteScreen() {
           position_id:   c.position_id,
           position_name: c.position_name,
           department:    c.department,
+          program:       c.program ?? null,
           candidates:    [],
         });
       }
@@ -569,6 +606,11 @@ export function VoteScreen() {
     const deptOrder = [...DEPARTMENT_POSITIONS] as string[];
 
     return [...positionMap.values()].sort((a, b) => {
+      const aIsCoord = a.position_name === PROGRAM_COORDINATOR_POSITION;
+      const bIsCoord = b.position_name === PROGRAM_COORDINATOR_POSITION;
+      if (aIsCoord && !bIsCoord) return 1;
+      if (!aIsCoord && bIsCoord) return -1;
+
       const aExecIdx = execOrder.indexOf(a.position_name);
       const bExecIdx = execOrder.indexOf(b.position_name);
       const aDeptIdx = deptOrder.indexOf(a.position_name);
@@ -583,8 +625,8 @@ export function VoteScreen() {
 
   const ballotPositions = useMemo((): BallotPosition[] => {
     if (!selectedDept) return [];
-    return getCandidatesForBallot(selectedDept);
-  }, [selectedDept, getCandidatesForBallot]);
+    return getCandidatesForBallot(selectedDept, selectedProgram);
+  }, [selectedDept, selectedProgram, getCandidatesForBallot]);
 
   const execPositions = useMemo(() => ballotPositions.filter(bp => bp.department === 'Executive Council'), [ballotPositions]);
   const deptPositions = useMemo(() => ballotPositions.filter(bp => bp.department !== 'Executive Council'), [ballotPositions]);
@@ -618,14 +660,14 @@ export function VoteScreen() {
   // ─── Handlers ───────────────────────────────────────────────────────────────
 
   const handleBegin = useCallback(() => {
-    if (!selectedDept || !consented) return;
+    if (!selectedDept || !selectedProgram || !consented) return;
     reset(); setPhase('ballot');
-  }, [selectedDept, consented, reset]);
+  }, [selectedDept, selectedProgram, consented, reset]);
 
   const handleGoBack = useCallback(() => {
     Alert.alert('Go Back to Setup?', 'Your current vote selections will be cleared.', [
       { text: 'Stay', style: 'cancel' },
-      { text: 'Go Back', style: 'destructive', onPress: () => { reset(); setConsented(false); setPhase('setup'); } },
+      { text: 'Go Back', style: 'destructive', onPress: () => { reset(); setConsented(false); setSelectedProgram(null); setPhase('setup'); } },
     ]);
   }, [reset]);
 
@@ -670,7 +712,9 @@ export function VoteScreen() {
         {phase === 'setup' && (
           <SetupScreen
             selectedDept={selectedDept}
-            onSelectDept={setSelectedDept}
+            onSelectDept={handleSelectDept}
+            selectedProgram={selectedProgram}
+            onSelectProgram={setSelectedProgram}
             consented={consented}
             onToggleConsent={() => setConsented(v => !v)}
             onBegin={handleBegin}
@@ -695,7 +739,7 @@ export function VoteScreen() {
               </Pressable>
               <View style={{ flex: 1 }}>
                 <Text style={s.headerTitle}>Cast Your Vote</Text>
-                <Text style={s.headerSub}>SY 2025–2026 · {selectedDept ?? 'DLSL COMELEC'}</Text>
+                <Text style={s.headerSub} numberOfLines={1}>SY 2025–2026 · {selectedDept ?? 'DLSL COMELEC'}{selectedProgram ? ` · ${selectedProgram}` : ''}</Text>
               </View>
               <View style={[s.progressPill, allSelected && s.progressPillDone]}>
                 <Text style={[s.progressText, allSelected && { color: C.greenBright }]}>{selectedCount}/{totalPositions}</Text>
@@ -801,6 +845,7 @@ function makeStyles(C: ThemeColors) {
     positionHeader:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderBottomWidth: 1, borderBottomColor: C.border },
     positionMeta:     { gap: 2 },
     positionName:     { fontSize: 14, fontWeight: '700', color: C.text },
+    positionProgram:  { fontSize: 11, color: C.textSub, marginTop: 1 },
     positionCount:    { fontSize: 11, color: C.textMuted },
 
     doneBadge:        { flexDirection: 'row', alignItems: 'center', backgroundColor: C.greenLight, borderRadius: 20, paddingHorizontal: 9, paddingVertical: 4, borderWidth: 1, borderColor: C.greenBright + '44' },

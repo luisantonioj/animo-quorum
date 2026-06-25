@@ -27,6 +27,49 @@ export const DEPARTMENTS = [
 ] as const;
 
 export type Department = (typeof DEPARTMENTS)[number];
+export type VoterDepartment = Exclude<Department, 'Executive Council'>;
+
+export const PROGRAMS: Record<VoterDepartment, string[]> = {
+  CBEAM: [
+    'BS Accountancy',
+    'BS Accounting Information System',
+    'BS Business Administration (Financial Management)',
+    'BS Business Administration (Marketing Management)',
+    'BS Entrepreneurship',
+    'BS Legal Management',
+    'BS Management Technology',
+  ],
+  CEAS: [
+    'AB Communication',
+    'Bachelor of Multimedia Arts',
+    'BS Biology',
+    'Bachelor of Elementary Education',
+    'BS Mathematics',
+    'BS Psychology',
+    'BS Secondary Education (English)',
+    'BS Secondary Education (Filipino)',
+    'BS Secondary Education (Mathematics)',
+    'BS Secondary Education (Social Studies)',
+  ],
+  CIHTM: [
+    'BS Hotel and Restaurant Management',
+    'BS Tourism Management',
+  ],
+  CITE: [
+    'BS Architecture',
+    'BS Computer Engineering',
+    'BS Computer Science',
+    'BS Electronics Engineering',
+    'BS Electrical Engineering',
+    'BS Entertainment and Multimedia Computing (Digital Animation)',
+    'BS Entertainment and Multimedia Computing (Game Development)',
+    'BS Industrial Engineering',
+    'BS Information Technology',
+  ],
+  CON: [
+    'BS Nursing',
+  ],
+};
 
 export const EXECUTIVE_POSITIONS = [
   'Executive President',
@@ -47,9 +90,12 @@ export const DEPARTMENT_POSITIONS = [
   '4th Year Representative',
 ] as const;
 
+export const PROGRAM_COORDINATOR_POSITION = 'Program Coordinator' as const;
+
 export type ExecutivePosition = (typeof EXECUTIVE_POSITIONS)[number];
 export type DepartmentPosition = (typeof DEPARTMENT_POSITIONS)[number];
-export type Position = ExecutivePosition | DepartmentPosition;
+export type ProgramCoordinatorPosition = typeof PROGRAM_COORDINATOR_POSITION;
+export type Position = ExecutivePosition | DepartmentPosition | ProgramCoordinatorPosition;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,6 +106,7 @@ export interface Candidate {
   position_id: string;       // matches a key in POSITIONS_MAP
   position_name: Position;
   department: Department;    // 'Executive Council' for exec candidates
+  program?: string | null;   // non-null only for Program Coordinator candidates
   photo_url: string | null;
   email: string | null;
   credentials: string | null;
@@ -71,6 +118,7 @@ export interface BallotPosition {
   position_id: string;
   position_name: Position;
   department: Department;
+  program?: string | null;
   candidates: Candidate[];
 }
 
@@ -944,13 +992,13 @@ interface CandidateStore {
   /** All candidates belonging to a specific department */
   getCandidatesForDepartment: (department: Department) => Candidate[];
   /**
-   * Returns ballot positions (with their candidates) visible to the given
-   * voter's department.
-   *   - Executive positions are included for every department.
-   *   - Department positions are included only for the matching department.
+   * Returns ballot positions (with their candidates) visible to the given voter.
+   *   - Executive Council positions → all students
+   *   - Department positions (program = null) → matching department only
+   *   - Program Coordinator positions (program non-null) → matching dept AND matching program
    *   - Disabled positions are excluded entirely.
    */
-  getCandidatesForBallot: (voterDepartment: Exclude<Department, 'Executive Council'>) => BallotPosition[];
+  getCandidatesForBallot: (voterDepartment: Exclude<Department, 'Executive Council'>, voterProgram: string | null) => BallotPosition[];
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -996,14 +1044,14 @@ export const useCandidateStore = create<CandidateStore>((set, get) => ({
     return candidates.filter((c) => c.department === department);
   },
 
-  getCandidatesForBallot: (voterDepartment) => {
+  getCandidatesForBallot: (voterDepartment, voterProgram) => {
     const { candidates, disabledPositions } = get();
 
-    // Determine which candidates are visible to this voter
     const visible = candidates.filter((c) => {
-      const isExec = c.department === 'Executive Council';
-      const isDeptMatch = c.department === voterDepartment;
-      return isExec || isDeptMatch;
+      if (c.department === 'Executive Council') return true;
+      if (c.department !== voterDepartment) return false;
+      if ((c.program ?? null) === null) return true;
+      return (c.program ?? null) === voterProgram;
     });
 
     // Group by position_id, preserving display order
@@ -1017,29 +1065,31 @@ export const useCandidateStore = create<CandidateStore>((set, get) => ({
           position_id: c.position_id,
           position_name: c.position_name,
           department: c.department,
+          program: c.program ?? null,
           candidates: [],
         });
       }
       positionMap.get(c.position_id)!.candidates.push(c);
     });
 
-    // Sort: Executive positions first (in declaration order), then department positions
+    // Sort: exec council → dept positions → program coordinator
     const execOrder = [...EXECUTIVE_POSITIONS] as string[];
     const deptOrder = [...DEPARTMENT_POSITIONS] as string[];
 
     return [...positionMap.values()].sort((a, b) => {
+      const aIsCoord = a.position_name === PROGRAM_COORDINATOR_POSITION;
+      const bIsCoord = b.position_name === PROGRAM_COORDINATOR_POSITION;
+      if (aIsCoord && !bIsCoord) return 1;
+      if (!aIsCoord && bIsCoord) return -1;
+
       const aExecIdx = execOrder.indexOf(a.position_name);
       const bExecIdx = execOrder.indexOf(b.position_name);
       const aDeptIdx = deptOrder.indexOf(a.position_name);
       const bDeptIdx = deptOrder.indexOf(b.position_name);
 
-      // Both executive
       if (aExecIdx !== -1 && bExecIdx !== -1) return aExecIdx - bExecIdx;
-      // a is executive, b is department → exec first
       if (aExecIdx !== -1) return -1;
-      // b is executive, a is department → exec first
       if (bExecIdx !== -1) return 1;
-      // Both department
       return aDeptIdx - bDeptIdx;
     });
   },
