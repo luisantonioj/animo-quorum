@@ -855,8 +855,15 @@ function AdminCandidatesScreen() {
   const queryClient = useQueryClient();
   const activeCycleId = useAuthStore(state => state.activeCycleId);
   const { data: cycles = [] } = useElectionCycles();
-  const activeCycle = cycles.find(c => c.id === activeCycleId) ?? null;
-  const isCycleReadOnly = !activeCycleId || activeCycle?.status === 'closed' || activeCycle?.status === 'archived';
+  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
+  const visibleCycleId = selectedCycleId ?? activeCycleId;
+  const visibleCycle = cycles.find(c => c.id === visibleCycleId) ?? null;
+  const isCycleReadOnly = !activeCycleId || visibleCycleId !== activeCycleId || visibleCycle?.status !== 'active';
+
+  useEffect(() => {
+    if (!selectedCycleId && activeCycleId) setSelectedCycleId(activeCycleId);
+  }, [activeCycleId, selectedCycleId]);
+
   useFocusEffect(
     useCallback(() => {
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
@@ -880,17 +887,17 @@ function AdminCandidatesScreen() {
   }, [dbPositions]);
 
   const { data: dbCandidates = [], isLoading } = useQuery({
-    queryKey: ['candidates', 'admin', activeCycleId],
+    queryKey: ['candidates', 'admin', visibleCycleId],
     queryFn: async () => {
-      if (!activeCycleId) return [];
+      if (!visibleCycleId) return [];
       const { data, error } = await supabase
         .from('Candidates')
         .select('*, Positions(position_name)')
-        .eq('election_cycle_id', activeCycleId);
+        .eq('election_cycle_id', visibleCycleId);
       if (error) throw error;
       return data;
     },
-    enabled: !!activeCycleId,
+    enabled: !!visibleCycleId,
   });
 
   const deleteMutation = useMutation({
@@ -1279,6 +1286,35 @@ function AdminCandidatesScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={S.screen.scrollContent} showsVerticalScrollIndicator={false}>
+
+          {cycles.length > 0 && (
+            <View style={{ marginBottom: SPACE.md }}>
+              <Text style={[S.screen.sectionLabel, { marginTop: 0 }]}>Election Cycle</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={S.filter.innerRow}>
+                  {cycles.map(cycle => {
+                    const isSelected = cycle.id === visibleCycleId;
+                    const isActive = cycle.id === activeCycleId;
+                    return (
+                      <Pressable
+                        key={cycle.id}
+                        onPress={() => setSelectedCycleId(cycle.id)}
+                        style={({ pressed }) => [
+                          S.filter.tab,
+                          isSelected && S.filter.tabActive,
+                          pressed && { opacity: 0.85 },
+                        ]}
+                      >
+                        <Text style={[S.filter.tabText, isSelected && S.filter.tabTextActive]}>
+                          {cycle.label}{isActive ? ' (Active)' : ''} - {cycle.status}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            </View>
+          )}
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.filter.scrollRow}>
             <View style={S.filter.innerRow}>
