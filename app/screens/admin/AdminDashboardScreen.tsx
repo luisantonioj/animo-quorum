@@ -429,16 +429,16 @@ const VotingControlPanel: React.FC<{
 
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
+  const votingStartTime = settings?.voting_start_time ?? null;
+  const votingEndTime = settings?.voting_end_time ?? null;
 
   const [isStartPickerVisible, setStartPickerVisible] = useState(false);
   const [isEndPickerVisible, setEndPickerVisible] = useState(false);
 
   useEffect(() => {
-    if (settings) {
-      setStartDate(settings.voting_start_time ? new Date(settings.voting_start_time) : null);
-      setEndDate(settings.voting_end_time ? new Date(settings.voting_end_time) : null);
-    }
-  }, [settings]);
+    setStartDate(votingStartTime ? new Date(votingStartTime) : null);
+    setEndDate(votingEndTime ? new Date(votingEndTime) : null);
+  }, [votingStartTime, votingEndTime]);
 
   const handleSave = () => {
     try {
@@ -994,7 +994,7 @@ export function AdminDashboardScreen() {
   }, [activeCycleId, selectedCycleId]);
 
   // ── Derived data (must be above useEffects that depend on posts) ──────────
-  const posts    = (rawPosts ?? []) as RawPost[];
+  const posts    = useMemo(() => (rawPosts ?? []) as RawPost[], [rawPosts]);
   const filtered = (activeTab === 'miting' || activeTab === 'voting')
     ? []
     : posts.filter(p => activeTab === 'all' || p.type === activeTab);
@@ -1080,7 +1080,7 @@ export function AdminDashboardScreen() {
   // ── Comment counts per post ───────────────────────────────────────────────
   useEffect(() => {
     if (!posts.length) {
-      setCommentCounts({});
+      setCommentCounts(prev => Object.keys(prev).length ? {} : prev);
       return;
     }
 
