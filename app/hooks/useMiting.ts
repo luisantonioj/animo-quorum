@@ -58,7 +58,7 @@ export function useStudentUpvotes(studentId?: string) {
       if (error) throw error;
       return data.map(d => d.question_id);
     },
-    enabled: !!studentId,
+    enabled: !!studentId && !!activeCycleId,
   });
 }
 

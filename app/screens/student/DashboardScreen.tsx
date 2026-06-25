@@ -37,7 +37,8 @@ import { useComments, useCreateComment, useDeleteComment, Comment as CommentType
 import { useLikes, useToggleLike } from '../../hooks/useLikes';
 import { usePollResponses, useSubmitPollResponse } from '../../hooks/usePollResponses';
 import { useLiveResults, LivePosition } from '../../hooks/useLiveResults';
-import { useSettings, VotingStatus } from '../../hooks/useSettings';
+import { useSettings } from '../../hooks/useSettings';
+import { useAuthStore } from '../../stores/authStore';
 import { supabase } from '../../utils/supabase';
 
 // =============================================================================
@@ -101,6 +102,7 @@ const VotingCountdown: React.FC = () => {
   const C = useThemeColors();
   const S = useMemo(() => makeStyles(C), [C]);
 
+  const activeCycleId = useAuthStore(state => state.activeCycleId);
   const { settings, votingStatus, isLoading } = useSettings();
   const [secondsLeft, setSecondsLeft]         = useState(0);
   const [secondsUntil, setSecondsUntil]       = useState(0);
@@ -140,6 +142,18 @@ const VotingCountdown: React.FC = () => {
       <View style={S.countdown.wrapper}>
         <View style={S.countdown.glowBar} />
         <ActivityIndicator color={C.green} style={{ marginVertical: 24 }} />
+      </View>
+    );
+  }
+
+  if (!activeCycleId) {
+    return (
+      <View style={S.countdown.wrapper}>
+        <View style={[S.countdown.glowBar, { backgroundColor: C.textMuted }]} />
+        <Text style={S.countdown.label}>Election</Text>
+        <Text style={{ color: C.textMuted, fontSize: 13, marginTop: 8, textAlign: 'center' }}>
+          No active election cycle is available yet.
+        </Text>
       </View>
     );
   }
@@ -303,7 +317,8 @@ const LiveVotingBoard: React.FC = () => {
   const C = useThemeColors();
   const S = useMemo(() => makeStyles(C), [C]);
 
-  const { positions, isLoading } = useLiveResults();
+  const activeCycleId = useAuthStore(state => state.activeCycleId);
+  const { positions, isLoading } = useLiveResults(activeCycleId);
 
   const stats = useMemo(() => {
     if (!positions || positions.length === 0) return null;
@@ -342,6 +357,8 @@ const LiveVotingBoard: React.FC = () => {
       overallPct,
     };
   }, [positions, C.green]);
+
+  if (!activeCycleId) return null;
 
   if (isLoading) {
     return (
@@ -836,7 +853,8 @@ const AnnouncementFeed: React.FC<{
   const S = useMemo(() => makeStyles(C), [C]);
 
   const [activeTab, setActiveTab] = useState<FeedTab>('all');
-  const { data: rawPosts, isLoading, isError, error } = usePosts();
+  const activeCycleId = useAuthStore(state => state.activeCycleId);
+  const { data: rawPosts, isLoading, isError, error } = usePosts(activeCycleId);
 
   const filteredPosts = ((rawPosts ?? []) as RawPost[]).filter(post => {
     if (activeTab === 'all')           return true;
@@ -871,14 +889,23 @@ const AnnouncementFeed: React.FC<{
         ))}
       </View>
 
-      {isLoading && (
+      {!activeCycleId && (
+        <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+          <Ionicons name="file-tray-outline" size={32} color={C.textMuted} />
+          <Text style={{ color: C.textMuted, marginTop: 12, fontSize: 13, textAlign: 'center' }}>
+            No active election cycle is available yet.
+          </Text>
+        </View>
+      )}
+
+      {activeCycleId && isLoading && (
         <View style={{ paddingVertical: 40, alignItems: 'center' }}>
           <ActivityIndicator size="large" color={C.green} />
           <Text style={{ color: C.textMuted, marginTop: 12, fontSize: 13 }}>Loading posts…</Text>
         </View>
       )}
 
-      {isError && (
+      {activeCycleId && isError && (
         <View style={{ paddingVertical: 32, alignItems: 'center', paddingHorizontal: 24 }}>
           <Ionicons name="cloud-offline-outline" size={32} color={C.textMuted} />
           <Text style={{ color: C.textMuted, marginTop: 12, fontSize: 13, textAlign: 'center' }}>
@@ -887,7 +914,7 @@ const AnnouncementFeed: React.FC<{
         </View>
       )}
 
-      {!isLoading && !isError && filteredPosts.length === 0 && (
+      {activeCycleId && !isLoading && !isError && filteredPosts.length === 0 && (
         <View style={{ paddingVertical: 40, alignItems: 'center' }}>
           <Ionicons name="file-tray-outline" size={32} color={C.textMuted} />
           <Text style={{ color: C.textMuted, marginTop: 12, fontSize: 13 }}>No posts yet.</Text>
@@ -895,7 +922,7 @@ const AnnouncementFeed: React.FC<{
       )}
 
       {/* ✅ CHANGE: Pass userName to PostCard */}
-      {!isLoading && !isError && filteredPosts.map(post => (
+      {activeCycleId && !isLoading && !isError && filteredPosts.map(post => (
         <PostCard key={post.id} post={post} userId={userId} userName={userName} />
       ))}
     </View>

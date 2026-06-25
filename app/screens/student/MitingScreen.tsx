@@ -90,7 +90,7 @@ export function MitingScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const s      = useMemo(() => makeStyles(C), [C]);
 
-  const { userProfile } = useAuthStore();
+  const { userProfile, activeCycleId } = useAuthStore();
   const userId = userProfile?.id ?? '';
   const { settings } = useSettings();
 
@@ -107,7 +107,8 @@ export function MitingScreen() {
   const [upvotedIds,     setUpvotedIds]   = useState<Set<string>>(new Set());
   const [showToast,      setShowToast]    = useState(false);
   const [isRefreshing,   setIsRefreshing] = useState(false);
-  const isMitingActive = !!settings?.is_miting_active;
+  // Miting activity is cycle-owned through ElectionCycles.is_miting_active.
+  const isMitingActive = !!activeCycleId && !!settings?.is_miting_active;
   const previousMitingActive = useRef(isMitingActive);
 
   const inputRef  = useRef<TextInput>(null);
@@ -178,13 +179,18 @@ export function MitingScreen() {
   const qLabel    = qCount === 1 ? '1 question' : `${qCount} questions`;
 
   if (!isMitingActive) {
+    const inactiveTitle = activeCycleId ? 'Not Live Yet' : 'No Active Election';
+    const inactiveBody = activeCycleId
+      ? "Miting de Avance hasn't started.\nYou'll get a notification when it goes live."
+      : "No active election cycle is available yet.\nMiting questions will open with the active cycle.";
+
     return (
       <SafeAreaView style={s.safe}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
         <View style={s.center}>
           <View style={s.inactiveIcon}><Ionicons name="mic-off-outline" size={40} color={C.textMuted} /></View>
-          <Text style={s.inactiveTitle}>Not Live Yet</Text>
-          <Text style={s.inactiveBody}>Miting de Avance hasn't started.{'\n'}You'll get a notification when it goes live.</Text>
+          <Text style={s.inactiveTitle}>{inactiveTitle}</Text>
+          <Text style={s.inactiveBody}>{inactiveBody}</Text>
         </View>
       </SafeAreaView>
     );
