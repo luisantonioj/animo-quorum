@@ -1310,6 +1310,15 @@ export function AdminDashboardScreen() {
   };
 
   const handleCycleStatusChange = async (id: string, status: ElectionCycleStatus) => {
+    const existingActiveCycle = cycles.find(cycle => cycle.status === 'active');
+    if (status === 'active' && existingActiveCycle && existingActiveCycle.id !== id) {
+      Alert.alert(
+        'Active Cycle Exists',
+        `Close "${existingActiveCycle.label}" before activating another election cycle.`
+      );
+      return;
+    }
+
     try {
       await updateCycleStatus({ id, status });
       setSelectedCycleId(id);
