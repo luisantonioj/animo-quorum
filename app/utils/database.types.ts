@@ -103,42 +103,6 @@ export type Database = {
           },
         ]
       }
-      ElectionCycles: {
-        Row: {
-          created_at: string | null
-          id: string
-          is_miting_active: boolean | null
-          label: string
-          show_live_results: boolean | null
-          status: string
-          updated_at: string | null
-          voting_end_time: string | null
-          voting_start_time: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          is_miting_active?: boolean | null
-          label: string
-          show_live_results?: boolean | null
-          status?: string
-          updated_at?: string | null
-          voting_end_time?: string | null
-          voting_start_time?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          is_miting_active?: boolean | null
-          label?: string
-          show_live_results?: boolean | null
-          status?: string
-          updated_at?: string | null
-          voting_end_time?: string | null
-          voting_start_time?: string | null
-        }
-        Relationships: []
-      }
       Comments: {
         Row: {
           content: string
@@ -187,6 +151,42 @@ export type Database = {
             referencedColumns: ["auth_id"]
           },
         ]
+      }
+      ElectionCycles: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_miting_active: boolean | null
+          label: string
+          show_live_results: boolean | null
+          status: string
+          updated_at: string | null
+          voting_end_time: string | null
+          voting_start_time: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_miting_active?: boolean | null
+          label: string
+          show_live_results?: boolean | null
+          status?: string
+          updated_at?: string | null
+          voting_end_time?: string | null
+          voting_start_time?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_miting_active?: boolean | null
+          label?: string
+          show_live_results?: boolean | null
+          status?: string
+          updated_at?: string | null
+          voting_end_time?: string | null
+          voting_start_time?: string | null
+        }
+        Relationships: []
       }
       Likes: {
         Row: {
