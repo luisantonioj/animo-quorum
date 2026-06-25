@@ -106,7 +106,7 @@ begin
     and rel.relname = 'Votes'
     and con.contype = 'u'
     and array(
-      select att.attname
+      select att.attname::text
       from unnest(con.conkey) with ordinality as cols(attnum, ord)
       join pg_attribute att
         on att.attrelid = rel.oid
